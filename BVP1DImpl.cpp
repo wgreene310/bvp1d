@@ -1,3 +1,18 @@
+// Copyright (C) 2016 William H. Greene
+//
+// This program is free software; you can redistribute it and/or modify it under
+// the terms of the GNU General Public License as published by the Free Software
+// Foundation; either version 3 of the License, or (at your option) any later
+// version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT
+// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+// FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
+// details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program; if not, see <http://www.gnu.org/licenses/>.
+
 #include <iostream>
 #include <limits>
 
@@ -126,46 +141,13 @@ namespace {
     return(0);
   }
 
-#if 0
-  template<class T>
-  void odeFuncLaplace(const RealVector &y, T &fVec) {
-    const double c = .2, f = .3;
-    fVec[0] = y[1]/c;
-    fVec[1] = -f;
-  }
-  template<class Ty, class Tg>
-  void bcFuncLaplace(const Ty &y0, const Ty &yn, Tg &gVec) {
-    gVec << y0[0], yn[1];
-  }
-#endif
-
-  int funcLaplace(N_Vector y, N_Vector phi, void *user_data) {
+  int funcKinsol(N_Vector y, N_Vector phi, void *user_data) {
 
     BVP1DImpl *bvp = (BVP1DImpl*) user_data;
-#if 1
     int neq = NV_LENGTH_S(y);
     MapVec yVec(NV_DATA_S(y), neq);
     MapVec phiVec(NV_DATA_S(phi), neq);
     bvp->calcPhi(yVec, phiVec);
-#else
-    int nn = bvp->numNodes;
-    MapMat yMat(NV_DATA_S(y), bvp->numDepVars, nn);
-    MapMat phiMat(NV_DATA_S(phi), bvp->numDepVars, nn);
-    bcFuncLaplace(yMat.col(0), yMat.col(nn-1), phiMat.col(0));
-    Eigen::Vector2d fi, fim1, fim2, yim2;
-    odeFuncLaplace(yMat.col(0), fim1);
-    for (int i = 1; i < nn; i++) {
-      double hi = bvp->mesh[i] - bvp->mesh[i - 1];
-      auto &yi = yMat.col(i);
-      odeFuncLaplace(yMat.col(i), fi);
-      auto &yim1 = yMat.col(i - 1);
-      double xm2 = bvp->mesh[i - 1] + hi / 2.;
-      yim2 = (yim1 + yi) / 2. - hi / 8.*(fi - fim1);
-      odeFuncLaplace(yim2, fim2);
-      phiMat.col(i) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
-      fim1 = fi;
-    }
-#endif
     return 0;
   }
 
@@ -187,16 +169,6 @@ bvp(bvp), mesh(mesh), yInit(yInit)
 BVP1DImpl::~BVP1DImpl()
 {
 }
-
-#if 0
-Eigen::MatrixXd BVP1DImpl::solve()
-{
-  numDepVars = 2; // FIXME
-  Eigen::MatrixXd y(numDepVars, numNodes);
-  laplaceTest(y);
-  return y;
-}
-#endif
 
 int BVP1DImpl::batheTest() {
   typedef Eigen::Triplet<double> Triplet;
@@ -285,7 +257,7 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat)
 
   void *kmem = KINCreate();
   if (check_flag((void *)kmem, "KINCreate", 0)) return(1);
-  int flag = KINInit(kmem, funcLaplace, u);
+  int flag = KINInit(kmem, funcKinsol, u);
   if (check_flag(&flag, "KINInit", 1)) return(1);
   int ier = KINSetUserData(kmem, this);
   if (check_flag(&ier, "KINSetUserData", 1)) return(1);
