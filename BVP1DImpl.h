@@ -29,11 +29,12 @@ public:
   class BVPDefn {
   public:
     virtual void odeFunc(double x, const RealVector &y,
-      RealVector &f) = 0;
+      const RealVector &p, RealVector &f) = 0;
     virtual void bcFunc(const RealVector &y0, const RealVector &yn,
-      RealVector &g) = 0;
+      const RealVector &p, RealVector &g) = 0;
   };
-  BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit);
+  BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
+    RealVector &parameters);
   ~BVP1DImpl();
   //Eigen::MatrixXd solve();
   template<class T>
@@ -47,8 +48,8 @@ private:
   BVPDefn &bvp;
   RealVector &mesh;
   RealMatrix &yInit;
-  //RealVector phi;
-  int numNodes, numDepVars;
-  RealVector fi, fim1, fim2, yim2;
+  RealVector parameters;
+  int numNodes, numDepVars, numParams;
+  RealVector gVec, fi, fim1, fim2, yim2;
 };
 

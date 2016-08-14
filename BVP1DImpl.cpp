@@ -20,6 +20,7 @@ using std::cout;
 using std::endl;
 
 #include "BVP1DImpl.h"
+#include "BVP1dException.h"
 
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
@@ -37,17 +38,17 @@ void BVP1DImpl::calcPhi(const T &y, T &phi)
 {
   Eigen::Map<const Eigen::MatrixXd> yMat(y.data(), numDepVars, numNodes);
   MapMat phiMat(phi.data(), numDepVars, numNodes);
-  bvp.bcFunc(yMat.col(0), yMat.col(numNodes - 1), fi);
-  phiMat.col(0) = fi;
-  bvp.odeFunc(mesh[0], yMat.col(0), fim1);
+  bvp.bcFunc(yMat.col(0), yMat.col(numNodes - 1), parameters, gVec);
+  phiMat.col(0) = gVec;
+  bvp.odeFunc(mesh[0], yMat.col(0), parameters, fim1);
   for (int i = 1; i < numNodes; i++) {
     double hi = mesh[i] - mesh[i - 1];
     auto &yi = yMat.col(i);
-    bvp.odeFunc(mesh[i], yMat.col(i), fi);
+    bvp.odeFunc(mesh[i], yMat.col(i), parameters, fi);
     auto &yim1 = yMat.col(i - 1);
     double xm2 = mesh[i - 1] + hi / 2.;
     yim2 = (yim1 + yi) / 2. - hi / 8.*(fi - fim1);
-    bvp.odeFunc(mesh[i], yim2, fim2);
+    bvp.odeFunc(mesh[i], yim2, parameters, fim2);
     phiMat.col(i) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
     fim1 = fi;
   }
@@ -154,11 +155,17 @@ namespace {
 }
 
 
-BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit) :
-bvp(bvp), mesh(mesh), yInit(yInit)
+BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
+  RealVector &parameters) :
+  bvp(bvp), mesh(mesh), yInit(yInit), parameters(parameters)
 {
+  if (yInit.cols() != mesh.size())
+    throw BVP1dException("bvp1d:solinit_x_y_inconsistent",
+    "The number of columns in y must equal the length of the x array.");
   numDepVars = yInit.rows();
   numNodes = mesh.rows();
+  numParams = parameters.size();
+  gVec.resize(numDepVars + numParams);
   fi.resize(numDepVars);
   fim1.resize(numDepVars);
   fim2.resize(numDepVars);
@@ -246,11 +253,11 @@ int BVP1DImpl::batheTest() {
 
 int BVP1DImpl::solve(Eigen::MatrixXd &solMat)
 {
-  const int n = numDepVars*numNodes;
+  const int neq = numDepVars*numNodes + numParams;
   solMat.resize(numDepVars, numNodes);
 
-  N_Vector u = N_VNew_Serial(n);
-  MapMat uMat(NV_DATA_S(u), numDepVars, numNodes);
+  N_Vector u = N_VNew_Serial(neq);
+  MapMat uMat(NV_DATA_S(u), numDepVars, numNodes); // FIXME!!
   //uMat.setConstant(1);
   uMat = yInit;
   //cout << "yInit\n" << uMat << endl;
@@ -267,10 +274,10 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat)
   if (check_flag(&flag, "KINSetFuncNormTol", 1)) return(1);
   flag = KINSetScaledStepTol(kmem, scsteptol);
   if (check_flag(&flag, "KINSetScaledStepTol", 1)) return(1);
-  flag = KINDense(kmem, n);
+  flag = KINDense(kmem, neq);
   if (check_flag(&flag, "KINDense", 1)) return(1);
 
-  N_Vector scale = N_VNew_Serial(n);
+  N_Vector scale = N_VNew_Serial(neq);
   N_VConst_Serial(1, scale);
 
   /* Call main solver */

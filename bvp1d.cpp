@@ -50,7 +50,7 @@ public:
     mxDestroyArray(mxYn);
   }
   virtual void odeFunc(double x, const RealVector &y,
-    RealVector &fVec) {
+    const RealVector &p, RealVector &fVec) {
 #if 0
     const double c = .2, f = .3;
     fVec[0] = y[1] / c;
@@ -64,7 +64,7 @@ public:
 #endif
   }
   virtual void bcFunc(const RealVector &y0, const RealVector &yn,
-    RealVector &g) {
+    const RealVector &p, RealVector &g) {
 #if 1
     std::copy_n(y0.data(), numDepVars, mxGetPr(mxY0));
     std::copy_n(yn.data(), numDepVars, mxGetPr(mxYn));
@@ -115,8 +115,13 @@ void mexFunction(int nlhs, mxArray*
     }
   }
 
+  RealVector parameters;
+  mxArray *mxParams = mxGetField(solinit, 0, "parameters");
+
   mxArray *sol = mxCreateStructMatrix(1, 1, numFields, &reqFieldNames[0]);
   MexInterface mexInt;
+  if (mxParams)
+    parameters = mexInt.fromMxArrayVec(mxParams);
   try {
     RealVector mesh = mexInt.fromMxArrayVec(mxFlds[0]);
     //cout << mesh << endl;
@@ -125,7 +130,7 @@ void mexFunction(int nlhs, mxArray*
       mexErrMsgIdAndTxt("bvp1d:solinit_x_y_inconsistent", 
       "The number of columns in y must equal the length of the x array.");
     MexBVP bvpDef(yInit, mexInt, prhs[0], prhs[1]);
-    BVP1DImpl bvp(bvpDef, mesh, yInit);
+    BVP1DImpl bvp(bvpDef, mesh, yInit, parameters);
     Eigen::MatrixXd y;
     int err = bvp.solve(y);
     if (err)
