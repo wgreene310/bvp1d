@@ -28,7 +28,9 @@ using std::endl;
 #include <kinsol/kinsol_dense.h>
 #include <kinsol/kinsol_klu.h>
 
+#if 0
 #include <FDJacobian.h>
+#endif
 
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
@@ -37,9 +39,15 @@ template<class T>
 void BVP1DImpl::calcPhi(const T &y, T &phi)
 {
   Eigen::Map<const Eigen::MatrixXd> yMat(y.data(), numDepVars, numNodes);
-  MapMat phiMat(phi.data(), numDepVars, numNodes);
+  //MapMat phiMat(phi.data(), numDepVars, numNodes);
+  if (numParams) {
+    parameters = y.segment(numDepVars*numNodes, numParams);
+    //cout << "p=" << parameters.transpose() << endl;
+  }
+  int phiOff = gVec.rows();
   bvp.bcFunc(yMat.col(0), yMat.col(numNodes - 1), parameters, gVec);
-  phiMat.col(0) = gVec;
+  //phiMat.col(0) = gVec;
+  phi.head(phiOff) = gVec;
   bvp.odeFunc(mesh[0], yMat.col(0), parameters, fim1);
   for (int i = 1; i < numNodes; i++) {
     double hi = mesh[i] - mesh[i - 1];
@@ -48,12 +56,14 @@ void BVP1DImpl::calcPhi(const T &y, T &phi)
     auto &yim1 = yMat.col(i - 1);
     double xm2 = mesh[i - 1] + hi / 2.;
     yim2 = (yim1 + yi) / 2. - hi / 8.*(fi - fim1);
-    bvp.odeFunc(mesh[i], yim2, parameters, fim2);
-    phiMat.col(i) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
+    bvp.odeFunc(xm2, yim2, parameters, fim2);
+    //phiMat.col(i) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
+    phi.segment(phiOff, numDepVars) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
     fim1 = fi;
+    phiOff += numDepVars;
   }
 #if 0
-  cout << "phi\n" << phiMat << endl;
+  cout << "phi\n" << phi << endl;
 #endif
 }
 
@@ -170,6 +180,10 @@ BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
   fim1.resize(numDepVars);
   fim2.resize(numDepVars);
   yim2.resize(numDepVars);
+#if 0
+  cout << "YInit\n" << yInit << endl;
+  cout << "pInit=" << parameters << endl;
+#endif
 }
 
 
@@ -251,19 +265,24 @@ int BVP1DImpl::batheTest() {
   return 0;
 }
 
-int BVP1DImpl::solve(Eigen::MatrixXd &solMat)
+int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
 {
-  const int neq = numDepVars*numNodes + numParams;
+  const int numYEqns = numDepVars*numNodes;
+  const int neq = numYEqns + numParams;
   solMat.resize(numDepVars, numNodes);
 
   N_Vector u = N_VNew_Serial(neq);
-  MapMat uMat(NV_DATA_S(u), numDepVars, numNodes); // FIXME!!
-  //uMat.setConstant(1);
+  double *uData = NV_DATA_S(u);
+  MapMat uMat(uData, numDepVars, numNodes);
   uMat = yInit;
   //cout << "yInit\n" << uMat << endl;
+  if (numParams) {
+    std::copy_n(parameters.data(), numParams, &uData[numYEqns]);
+    paramVec.resize(numParams);
+  }
 
   void *kmem = KINCreate();
-  if (check_flag((void *)kmem, "KINCreate", 0)) return(1);
+  if (check_flag((void *) kmem, "KINCreate", 0)) return(1);
   int flag = KINInit(kmem, funcKinsol, u);
   if (check_flag(&flag, "KINInit", 1)) return(1);
   int ier = KINSetUserData(kmem, this);
@@ -294,6 +313,8 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat)
   //cout << uMat << endl;
 
   solMat = uMat;
+  if (numParams)
+    std::copy_n(&uData[numYEqns], numParams, paramVec.data());
 
   return 0;
 }

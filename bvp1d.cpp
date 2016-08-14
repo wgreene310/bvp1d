@@ -34,52 +34,61 @@ namespace {
 
 class MexBVP : public BVP1DImpl::BVPDefn {
 public:
-  MexBVP(RealMatrix &yInit, MexInterface &mexInt, 
+  MexBVP(RealMatrix &yInit, RealVector &param, MexInterface &mexInt, 
     const mxArray *odeFuncPtr, const mxArray *bcFuncPtr) :
-    yInit(yInit), mexInt(mexInt), odeFuncPtr(odeFuncPtr), bcFuncPtr(bcFuncPtr) {
+    yInit(yInit), parameters(param), mexInt(mexInt), 
+    odeFuncPtr(odeFuncPtr), bcFuncPtr(bcFuncPtr) {
     numDepVars = yInit.rows();
     mxX = mxCreateDoubleScalar(0);
     mxY = mxCreateDoubleMatrix(numDepVars, 1, mxREAL);
     mxY0 = mxCreateDoubleMatrix(numDepVars, 1, mxREAL);
     mxYn = mxCreateDoubleMatrix(numDepVars, 1, mxREAL);
+    numParameters = parameters.size();
+    if (numParameters)
+      mxP = mxCreateDoubleMatrix(numParameters, 1, mxREAL);
+    else
+      mxP = 0;
   }
   ~MexBVP() {
     mxDestroyArray(mxX);
     mxDestroyArray(mxY);
     mxDestroyArray(mxY0);
     mxDestroyArray(mxYn);
+    if (mxP)
+      mxDestroyArray(mxP);
   }
   virtual void odeFunc(double x, const RealVector &y,
     const RealVector &p, RealVector &fVec) {
-#if 0
-    const double c = .2, f = .3;
-    fVec[0] = y[1] / c;
-    fVec[1] = -f;
-#else
     *mxGetPr(mxX) = x;
     std::copy_n(y.data(), numDepVars, mxGetPr(mxY));
-    const mxArray *inArgs[] = { odeFuncPtr, mxX, mxY };
+    int numInArgs = 3;
+    if (numParameters) {
+      std::copy_n(p.data(), numParameters, mxGetPr(mxP));
+      numInArgs++;
+    }
+    const mxArray *inArgs[] = { odeFuncPtr, mxX, mxY, mxP };
     RealVector *outArgs[] = { &fVec };
-    mexInt.callMatlab(inArgs, 3, outArgs, 1);
-#endif
+    mexInt.callMatlab(inArgs, numInArgs, outArgs, 1);
   }
   virtual void bcFunc(const RealVector &y0, const RealVector &yn,
     const RealVector &p, RealVector &g) {
-#if 1
     std::copy_n(y0.data(), numDepVars, mxGetPr(mxY0));
     std::copy_n(yn.data(), numDepVars, mxGetPr(mxYn));
-    const mxArray *inArgs[] = { bcFuncPtr, mxY0, mxYn };
+    int numInArgs = 3;
+    if (numParameters) {
+      std::copy_n(p.data(), numParameters, mxGetPr(mxP));
+      numInArgs++;
+    }
+    const mxArray *inArgs[] = { bcFuncPtr, mxY0, mxYn, mxP };
     RealVector *outArgs[] = { &g };
-    mexInt.callMatlab(inArgs, 3, outArgs, 1);
-#else
-    g << y0[0], yn[1];
-#endif
+    mexInt.callMatlab(inArgs, numInArgs, outArgs, 1);
   }
 private:
   RealMatrix &yInit;
+  RealVector &parameters;
   MexInterface &mexInt;
-  int numDepVars;
-  mxArray *mxX, *mxY, *mxY0, *mxYn;
+  int numDepVars, numParameters;
+  mxArray *mxX, *mxY, *mxY0, *mxYn, *mxP;
   const mxArray *odeFuncPtr, *bcFuncPtr;
 };
 
@@ -102,11 +111,11 @@ void mexFunction(int nlhs, mxArray*
   if (!mxIsStruct(solinit))
     mexErrMsgIdAndTxt("bvp1d:arg3_not_struct", 
     "Argument three must be a struct.");
-  const char *reqFieldNames[] = { "x", "y" };
-  const int numFields = sizeof(reqFieldNames) / sizeof(reqFieldNames[0]);
-  mxArray *mxFlds[numFields];
-  for (int i = 0; i < numFields; i++) {
-    const char *fn = reqFieldNames[i];
+  const char *fieldNames[] = { "x", "y", "solver", "parameters" };
+  const int numReqFields = 2;
+    mxArray *mxFlds[numReqFields];
+  for (int i = 0; i < numReqFields; i++) {
+    const char *fn = fieldNames[i];
     mxFlds[i] = mxGetField(solinit, 0, fn);
     if (!mxFlds[i]) {
       char msg[80];
@@ -115,13 +124,17 @@ void mexFunction(int nlhs, mxArray*
     }
   }
 
+  int numFields = numReqFields + 1;
   RealVector parameters;
   mxArray *mxParams = mxGetField(solinit, 0, "parameters");
-
-  mxArray *sol = mxCreateStructMatrix(1, 1, numFields, &reqFieldNames[0]);
   MexInterface mexInt;
-  if (mxParams)
+  if (mxParams) {
     parameters = mexInt.fromMxArrayVec(mxParams);
+    numFields++;
+  }
+
+  mxArray *sol = mxCreateStructMatrix(1, 1, numFields, &fieldNames[0]);
+
   try {
     RealVector mesh = mexInt.fromMxArrayVec(mxFlds[0]);
     //cout << mesh << endl;
@@ -129,15 +142,19 @@ void mexFunction(int nlhs, mxArray*
     if (yInit.cols() != mesh.size())
       mexErrMsgIdAndTxt("bvp1d:solinit_x_y_inconsistent", 
       "The number of columns in y must equal the length of the x array.");
-    MexBVP bvpDef(yInit, mexInt, prhs[0], prhs[1]);
+    MexBVP bvpDef(yInit, parameters, mexInt, prhs[0], prhs[1]);
     BVP1DImpl bvp(bvpDef, mesh, yInit, parameters);
-    Eigen::MatrixXd y;
-    int err = bvp.solve(y);
+    RealMatrix y;
+    RealVector p;
+    int err = bvp.solve(y, p);
     if (err)
       mexErrMsgIdAndTxt("bvp1d:solve_failure",
       "Unable to solve BVP.");
+    mxSetField(sol, 0, "solver", mxCreateString("bvp4c"));
     mxSetField(sol, 0, "x", mexInt.toMxArray(mesh));
     mxSetField(sol, 0, "y", mexInt.toMxArray(y));
+    if (mxParams)
+      mxSetField(sol, 0, "parameters", mexInt.toMxArray(p));
   }
   catch (const std::exception &ex) {
     mexErrMsgIdAndTxt("bvp1d:exception", ex.what());

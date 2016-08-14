@@ -40,7 +40,7 @@ public:
   template<class T>
   void calcPhi(const T &y, T &phi);
   int batheTest();
-  int solve(Eigen::MatrixXd &solMat);
+  int solve(RealMatrix &solMat, RealVector &paramVec);
   static RealVector linspace(double start, double end, int n);
   SparseMat J;
   RealVector rhs;
