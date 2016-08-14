@@ -151,7 +151,7 @@ void mexFunction(int nlhs, mxArray*
       mexErrMsgIdAndTxt("bvp1d:solve_failure",
       "Unable to solve BVP.");
     mxSetField(sol, 0, "solver", mxCreateString("bvp4c"));
-    mxSetField(sol, 0, "x", mexInt.toMxArray(mesh));
+    mxSetField(sol, 0, "x", mexInt.toMxArray(mesh.transpose()));
     mxSetField(sol, 0, "y", mexInt.toMxArray(y));
     if (mxParams)
       mxSetField(sol, 0, "parameters", mexInt.toMxArray(p));
