@@ -1,0 +1,55 @@
+CC=mkoctfile -mex
+CXX=mkoctfile -mex
+
+ifeq ($(findstring Windows, $(OS)),Windows)
+EIGEN=$(HOME)/src/Eigen/eigen-3.2.6
+OCTAVE_ROOT=c:/Octave/Octave-4.0.0
+OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.0/octave
+SUNDIALS_ROOT=$(HOME)/src/sundials-2.6.2/
+SUNDIALS_INC=-I$(SUNDIALS_ROOT)/src -I$(SUNDIALS_ROOT)/include -I./
+SUNDIALS_LDIR=$(SUNDIALS_ROOT)
+LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/4.0.0 -loctave.dll -loctinterp.dll
+else
+    UNAME_S := $(shell uname -s)
+		ifeq ($(UNAME_S),Linux)
+		  EIGEN=$(HOME)/src/Eigen/eigen-3.2.2
+      OCTAVE_ROOT=/opt/octave-4.0.0
+      OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.2/octave
+      SUNDIALS_ROOT=/usr/local/include/sundials
+      SUNDIALS_LDIR=/usr/local/lib
+      SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include -I./ 
+		endif
+#EIGEN=/opt/local/include/eigen3
+#EIGEN=/usr/include/eigen3
+#OCTAVE_ROOT=/opt/octave/current
+#OCTAVE_ROOT=/opt/octave-4.0.0
+#OCTAVE_INC=$(OCTAVE_ROOT)/opt/octave/current/include/octave-4.1.0+/octave/
+#OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.2/octave
+#SUNDIALS_ROOT=/opt/sundials/2.6.2
+#SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
+#SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include -I./pde1dmex 
+#SUNDIALS_LDIR=/usr/local/lib
+endif
+
+INC=-I$(EIGEN) -I$(OCTAVE_INC) $(SUNDIALS_INC)
+
+CXXFLAGS= -g -O2 -std=gnu++0x -Wno-deprecated-declarations $(INC)
+
+LIBS=$(SUNDIALS_LDIR)/libsundials_ida.a $(SUNDIALS_LDIR)/libsundials_nvecserial.a \
+     $(SUNDIALS_LDIR)/libsundials_kinsol.a $(LIB_OCT)
+
+OBJS=bvp1d.o  BVP1DImpl.o  MexInterface.o
+
+bvp1d.mex: $(OBJS)
+	mkoctfile -mex  $(OBJS) $(LIBS) -o bvp1d.mex
+
+clean:
+	$(RM) *.o
+
+distclean: clean
+	$(RM) bvp1d.mex
+	
+test:
+	#echo $(findstring Linux, $(OS))
+	echo $(OS)
+

@@ -19,6 +19,8 @@
 using std::cout;
 using std::endl;
 
+#define USE_KLU 0
+
 #include "BVP1DImpl.h"
 #include "BVP1dException.h"
 
@@ -26,7 +28,9 @@ using std::endl;
 #include <sundials/sundials_types.h>
 #include <kinsol/kinsol.h>
 #include <kinsol/kinsol_dense.h>
+#if USE_KLU
 #include <kinsol/kinsol_klu.h>
+#endif
 
 #if 0
 #include <FDJacobian.h>
@@ -51,9 +55,9 @@ void BVP1DImpl::calcPhi(const T &y, T &phi)
   bvp.odeFunc(mesh[0], yMat.col(0), parameters, fim1);
   for (int i = 1; i < numNodes; i++) {
     double hi = mesh[i] - mesh[i - 1];
-    auto &yi = yMat.col(i);
+    const auto &yi = yMat.col(i);
     bvp.odeFunc(mesh[i], yMat.col(i), parameters, fi);
-    auto &yim1 = yMat.col(i - 1);
+    const auto &yim1 = yMat.col(i - 1);
     double xm2 = mesh[i - 1] + hi / 2.;
     yim2 = (yim1 + yi) / 2. - hi / 8.*(fi - fim1);
     bvp.odeFunc(xm2, yim2, parameters, fim2);
@@ -102,6 +106,7 @@ namespace {
     return 0;
   }
 
+#if USE_KLU
   int jacBathe(N_Vector u, N_Vector f, SlsMat Jac, void *user_data,
     N_Vector tmp1, N_Vector tmp2) {
     prtLocVec(u, "u_jac");
@@ -117,8 +122,9 @@ namespace {
 
     return 0;
   }
+#endif
 
-  static int check_flag(void *flagvalue, char *funcname, int opt)
+  static int check_flag(void *flagvalue, const char *funcname, int opt)
   {
     int *errflag;
 
@@ -239,10 +245,12 @@ int BVP1DImpl::batheTest() {
   double fnormtol = 1e-8;
   flag = KINSetFuncNormTol(kmem, fnormtol);
   if (check_flag(&flag, "KINSetFuncNormTol", 1)) return(1);
+#if USE_KLU
   flag = KINKLU(kmem, n, nnz);
   if (check_flag(&flag, "KINKLU", 1)) return(1);
   flag = KINSlsSetSparseJacFn(kmem, jacBathe);
   if (check_flag(&flag, "KINSlsSetSparseJacFn", 1)) return(1);
+#endif
 
   N_Vector scale = N_VNew_Serial(n);
   N_VConst_Serial(1, scale);
