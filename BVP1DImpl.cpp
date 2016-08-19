@@ -23,6 +23,8 @@ using std::endl;
 
 #include "BVP1DImpl.h"
 #include "BVP1dException.h"
+#include "cubicInterp.h"
+#include "BVP1dOptions.h"
 
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
@@ -39,18 +41,16 @@ using std::endl;
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
 
-template<class T>
-void BVP1DImpl::calcPhi(const T &y, T &phi)
+template<class T1, class T2>
+void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
 {
   Eigen::Map<const Eigen::MatrixXd> yMat(y.data(), numDepVars, numNodes);
-  //MapMat phiMat(phi.data(), numDepVars, numNodes);
   if (numParams) {
     parameters = y.segment(numDepVars*numNodes, numParams);
     //cout << "p=" << parameters.transpose() << endl;
   }
   int phiOff = gVec.rows();
   bvp.bcFunc(yMat.col(0), yMat.col(numNodes - 1), parameters, gVec);
-  //phiMat.col(0) = gVec;
   phi.head(phiOff) = gVec;
   bvp.odeFunc(mesh[0], yMat.col(0), parameters, fim1);
   for (int i = 1; i < numNodes; i++) {
@@ -61,13 +61,29 @@ void BVP1DImpl::calcPhi(const T &y, T &phi)
     double xm2 = mesh[i - 1] + hi / 2.;
     yim2 = (yim1 + yi) / 2. - hi / 8.*(fi - fim1);
     bvp.odeFunc(xm2, yim2, parameters, fim2);
-    //phiMat.col(i) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
     phi.segment(phiOff, numDepVars) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
     fim1 = fi;
     phiOff += numDepVars;
   }
 #if 0
   cout << "phi\n" << phi << endl;
+#endif
+}
+
+template<class T>
+void BVP1DImpl::calcError(const T &u, RealVector &err)
+{
+  int neq = u.rows();
+#if 0
+  RealVector phi(neq);
+  calcPhi(u, phi);
+  double maxErr = phi.cwiseAbs().maxCoeff();
+  printf("Max error=%12.3e\n", maxErr);
+#else
+  int numEl = mesh.size() - 1;
+  for (int e = 0; e < numEl; e++) {
+    double h = mesh(e + 1) - mesh(e);
+  }
 #endif
 }
 
@@ -172,8 +188,8 @@ namespace {
 
 
 BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
-  RealVector &parameters) :
-  bvp(bvp), mesh(mesh), yInit(yInit), parameters(parameters)
+  RealVector &parameters, BVP1dOptions &options) :
+  bvp(bvp), mesh(mesh), yInit(yInit), parameters(parameters), options(options)
 {
   if (yInit.cols() != mesh.size())
     throw BVP1dException("bvp1d:solinit_x_y_inconsistent",
@@ -296,7 +312,8 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
   int ier = KINSetUserData(kmem, this);
   if (check_flag(&ier, "KINSetUserData", 1)) return(1);
   /* Specify stopping tolerance based on residual */
-  double fnormtol = 1e-5, scsteptol=fnormtol;
+  double fnormtol = options.getAbsTol();
+  double scsteptol = fnormtol;
   flag = KINSetFuncNormTol(kmem, fnormtol);
   if (check_flag(&flag, "KINSetFuncNormTol", 1)) return(1);
   flag = KINSetScaledStepTol(kmem, scsteptol);
@@ -319,6 +336,9 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
   if (check_flag(&flag, "KINSol", 1)) return(1);
 
   //cout << uMat << endl;
+  MapVec uVec(uData, neq);
+  RealVector err;
+  calcError(uVec, err);
 
   solMat = uMat;
   if (numParams)

@@ -21,15 +21,38 @@
 using std::cout;
 using std::endl;
 
+#include <boost/algorithm/string.hpp>
+
 #include <mex.h>
 
 #include "BVP1DImpl.h"
 #include "MexInterface.h"
+#include "BVP1dOptions.h"
 
 #define FUNC_NAME "bvp1d"
 
 namespace {
-
+  BVP1dOptions getOptions(const mxArray *opts) {
+    if (!mxIsStruct(opts))
+      mexErrMsgIdAndTxt("pde1d:optins_type",
+      "The 4th, options argument to " FUNC_NAME " must be a struct.");
+    BVP1dOptions pdeOpts;
+    int n = mxGetNumberOfFields(opts);
+    for (int i = 0; i < n; i++) {
+      const char *ni = mxGetFieldNameByNumber(opts, i);
+      mxArray *val = mxGetFieldByNumber(opts, 0, i);
+      if (boost::iequals(ni, "abstol"))
+        pdeOpts.setAbsTol(mxGetScalar(val));
+      else {
+        char msg[1024];
+        sprintf(msg, "The options argument contains the field \"%s\".\n"
+          "This is not a currently-supported option and will be ignored.",
+          ni);
+        mexWarnMsgIdAndTxt("pde1d:unknown_option", msg);
+      }
+    }
+    return pdeOpts;
+    }
 }
 
 class MexBVP : public BVP1DImpl::BVPDefn {
@@ -143,7 +166,10 @@ void mexFunction(int nlhs, mxArray*
       mexErrMsgIdAndTxt("bvp1d:solinit_x_y_inconsistent", 
       "The number of columns in y must equal the length of the x array.");
     MexBVP bvpDef(yInit, parameters, mexInt, prhs[0], prhs[1]);
-    BVP1DImpl bvp(bvpDef, mesh, yInit, parameters);
+    BVP1dOptions opts;
+    if (nrhs == 4)
+      opts = getOptions(prhs[3]);
+    BVP1DImpl bvp(bvpDef, mesh, yInit, parameters, opts);
     RealMatrix y;
     RealVector p;
     int err = bvp.solve(y, p);

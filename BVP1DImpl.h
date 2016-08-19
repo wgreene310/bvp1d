@@ -24,6 +24,8 @@ typedef Eigen::SparseMatrix<double> SparseMat;
 typedef Eigen::VectorXd RealVector;
 typedef Eigen::MatrixXd RealMatrix;
 
+class BVP1dOptions;
+
 class BVP1DImpl {
 public:
   class BVPDefn {
@@ -34,11 +36,12 @@ public:
       const RealVector &p, RealVector &g) = 0;
   };
   BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
-    RealVector &parameters);
+    RealVector &parameters, BVP1dOptions &options);
   ~BVP1DImpl();
-  //Eigen::MatrixXd solve();
+  template<class T1, class T2>
+  void calcPhi(const T1 &y, T2 &phi);
   template<class T>
-  void calcPhi(const T &y, T &phi);
+  void calcError(const T &u, RealVector &err);
   int batheTest();
   int solve(RealMatrix &solMat, RealVector &paramVec);
   static RealVector linspace(double start, double end, int n);
@@ -49,6 +52,7 @@ private:
   RealVector &mesh;
   RealMatrix &yInit;
   RealVector parameters;
+  const BVP1dOptions &options;
   int numNodes, numDepVars, numParams;
   RealVector gVec, fi, fim1, fim2, yim2;
 };
