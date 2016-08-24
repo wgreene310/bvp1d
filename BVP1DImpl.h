@@ -42,6 +42,9 @@ public:
   void calcPhi(const T1 &y, T2 &phi);
   template<class T>
   void calcError(const T &u, RealVector &err);
+  const RealVector &getError() {
+    return residualError;
+  }
   int batheTest();
   int solve(RealMatrix &solMat, RealVector &paramVec);
   static RealVector linspace(double start, double end, int n);
@@ -49,11 +52,13 @@ public:
   RealVector rhs;
 private:
   BVPDefn &bvp;
-  RealVector &mesh;
+  RealVector &initMesh, mesh;
   RealMatrix &yInit;
   RealVector parameters;
   const BVP1dOptions &options;
   int numNodes, numDepVars, numParams;
   RealVector gVec, fi, fim1, fim2, yim2;
+  RealMatrix fRHS;
+  RealVector residualError;
 };
 

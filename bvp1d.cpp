@@ -41,18 +41,21 @@ namespace {
     for (int i = 0; i < n; i++) {
       const char *ni = mxGetFieldNameByNumber(opts, i);
       mxArray *val = mxGetFieldByNumber(opts, 0, i);
+      if (mxIsEmpty(val)) continue;
       if (boost::iequals(ni, "abstol"))
         pdeOpts.setAbsTol(mxGetScalar(val));
+      else if (boost::iequals(ni, "reltol"))
+        pdeOpts.setRelTol(mxGetScalar(val));
       else {
         char msg[1024];
         sprintf(msg, "The options argument contains the field \"%s\".\n"
           "This is not a currently-supported option and will be ignored.",
           ni);
-        mexWarnMsgIdAndTxt("pde1d:unknown_option", msg);
+        mexWarnMsgIdAndTxt("bvp1d:unknown_option", msg);
       }
     }
     return pdeOpts;
-    }
+  }
 }
 
 class MexBVP : public BVP1DImpl::BVPDefn {
@@ -134,7 +137,7 @@ void mexFunction(int nlhs, mxArray*
   if (!mxIsStruct(solinit))
     mexErrMsgIdAndTxt("bvp1d:arg3_not_struct", 
     "Argument three must be a struct.");
-  const char *fieldNames[] = { "x", "y", "solver", "parameters" };
+  const char *fieldNames[] = { "x", "y", "solver", "error", "parameters" };
   const int numReqFields = 2;
     mxArray *mxFlds[numReqFields];
   for (int i = 0; i < numReqFields; i++) {
@@ -147,7 +150,7 @@ void mexFunction(int nlhs, mxArray*
     }
   }
 
-  int numFields = numReqFields + 1;
+  int numFields = numReqFields + 2;
   RealVector parameters;
   mxArray *mxParams = mxGetField(solinit, 0, "parameters");
   MexInterface mexInt;
@@ -179,6 +182,7 @@ void mexFunction(int nlhs, mxArray*
     mxSetField(sol, 0, "solver", mxCreateString("bvp4c"));
     mxSetField(sol, 0, "x", mexInt.toMxArray(mesh.transpose()));
     mxSetField(sol, 0, "y", mexInt.toMxArray(y));
+    mxSetField(sol, 0, "error", mexInt.toMxArray(bvp.getError()));
     if (mxParams)
       mxSetField(sol, 0, "parameters", mexInt.toMxArray(p));
   }

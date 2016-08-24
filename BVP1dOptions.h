@@ -19,20 +19,26 @@
 class BVP1dOptions
 {
 public:
-  BVP1dOptions(double absTol = 1e-6) :
-    absTol(absTol) {
+  BVP1dOptions(double absTol = 1e-6, double relTol=1e-3) :
+    absTol(absTol), relTol(relTol) {
     vectorizedFuncs = stats = false;
+    nMax = -1;
   }
   double getAbsTol() const { return absTol;  }
   void setAbsTol(double tol) { absTol = tol; }
+  double getRelTol() const { return relTol; }
+  void setRelTol(double tol) { relTol = tol; }
   bool isVectorized() const { return vectorizedFuncs; }
   void setVectorized(bool isVec) { vectorizedFuncs = isVec; }
   bool printStats() const { return stats; }
   void setPrintStats(bool sts) { stats = sts; }
+  int getNMax() const { return nMax; }
+  void setNMax(int nmax) { nMax = nmax; }
 private:
-  double absTol;
+  double absTol, relTol;
   bool vectorizedFuncs;
   bool stats;
+  int nMax;
 };
 
 #endif

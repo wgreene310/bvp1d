@@ -25,6 +25,7 @@ using std::endl;
 #include "BVP1dException.h"
 #include "cubicInterp.h"
 #include "BVP1dOptions.h"
+#include "GaussLobattoIntRule.h"
 
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
@@ -41,6 +42,7 @@ using std::endl;
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
 
+
 template<class T1, class T2>
 void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
 {
@@ -53,6 +55,7 @@ void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
   bvp.bcFunc(yMat.col(0), yMat.col(numNodes - 1), parameters, gVec);
   phi.head(phiOff) = gVec;
   bvp.odeFunc(mesh[0], yMat.col(0), parameters, fim1);
+  fRHS.col(0) = fim1;
   for (int i = 1; i < numNodes; i++) {
     double hi = mesh[i] - mesh[i - 1];
     const auto &yi = yMat.col(i);
@@ -63,6 +66,7 @@ void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
     bvp.odeFunc(xm2, yim2, parameters, fim2);
     phi.segment(phiOff, numDepVars) = yi - yim1 - hi / 6.*(fim1 + 4 * fim2 + fi);
     fim1 = fi;
+    fRHS.col(i) = fi;
     phiOff += numDepVars;
   }
 #if 0
@@ -73,18 +77,55 @@ void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
 template<class T>
 void BVP1DImpl::calcError(const T &u, RealVector &err)
 {
-  int neq = u.rows();
-#if 0
-  RealVector phi(neq);
-  calcPhi(u, phi);
-  double maxErr = phi.cwiseAbs().maxCoeff();
-  printf("Max error=%12.3e\n", maxErr);
-#else
+  GaussLobattoIntRule intRule(5);
+  const int numIntPts = 3;
+  GaussLobattoIntRule::IRule intPts[numIntPts];
+  for (int i = 0; i < numIntPts; i++)
+    intPts[i] = intRule.getPoint(i + 1);
+
+  Eigen::Map<const Eigen::MatrixXd> y(u.data(), numDepVars, numNodes);
+
+  if (numParams) 
+    parameters = u.segment(numDepVars*numNodes, numParams);
   int numEl = mesh.size() - 1;
+  residualError.resize(numEl);
+  residualError.setZero();
+  RealVector fim2X(numDepVars);
+  double absOvRel = options.getAbsTol() / options.getRelTol();
+  double maxErr = 0;
   for (int e = 0; e < numEl; e++) {
+    double elemErr = 0;
     double h = mesh(e + 1) - mesh(e);
-  }
+    double jac = h / 2;
+    for (int i = 0; i < numIntPts; i++) {
+      double s = intPts[i].xi;
+      cubicInterp(y.col(e), fRHS.col(e), y.col(e + 1), fRHS.col(e + 1),
+        h, s, yim2, fim2);
+#if 0
+      cout << "e=" << e << "i=" << i <<  "yim2=" << yim2.transpose() <<
+        " fim2=" << fim2.transpose() << endl;
 #endif
+      double xm2 = mesh[e] + h / 2.*(s+1);
+      bvp.odeFunc(xm2, yim2, parameters, fim2X);
+#if 0
+      cout << "e=" << e << "i=" << i <<  "yim2=" << yim2.transpose() <<
+        " fim2X=" << fim2X.transpose() << endl;
+#endif
+#if 0
+      cout << "xm2=" << xm2 << " fim2=" << fim2.transpose() << 
+        " fim2X=" << fim2X.transpose() << endl;
+      double err = (fim2 - fim2X).cwiseAbs().maxCoeff();
+      printf("Element: %2d, pt=%d, err=%12.3e\n", e, i, err);
+#endif
+      auto denom = fim2X.array().abs().max(absOvRel);
+      //cout << "denom=" << denom.transpose() << endl;
+      auto errI = ((fim2 - fim2X).array()/denom).matrix();
+      double errNorm = errI.dot(errI);
+      //elemErr += (fim2 - fim2X).array().square().matrix()*intPts[i].wt*jac;
+      elemErr += errNorm*intPts[i].wt*jac;
+    }
+    residualError(e) = sqrt(elemErr);
+  }
 }
 
 namespace {
@@ -187,10 +228,12 @@ namespace {
 }
 
 
-BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
+BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &initMesh, RealMatrix &yInit,
   RealVector &parameters, BVP1dOptions &options) :
-  bvp(bvp), mesh(mesh), yInit(yInit), parameters(parameters), options(options)
+  bvp(bvp), initMesh(initMesh), yInit(yInit), parameters(parameters),
+  options(options)
 {
+  mesh = initMesh;
   if (yInit.cols() != mesh.size())
     throw BVP1dException("bvp1d:solinit_x_y_inconsistent",
     "The number of columns in y must equal the length of the x array.");
@@ -199,6 +242,7 @@ BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &mesh, RealMatrix &yInit,
   numParams = parameters.size();
   gVec.resize(numDepVars + numParams);
   fi.resize(numDepVars);
+  fRHS.resize(numDepVars, numNodes);
   fim1.resize(numDepVars);
   fim2.resize(numDepVars);
   yim2.resize(numDepVars);
