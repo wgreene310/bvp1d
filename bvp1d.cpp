@@ -46,6 +46,8 @@ namespace {
         pdeOpts.setAbsTol(mxGetScalar(val));
       else if (boost::iequals(ni, "reltol"))
         pdeOpts.setRelTol(mxGetScalar(val));
+      else if (boost::iequals(ni, "nmax"))
+        pdeOpts.setNMax((int) mxGetScalar(val));
       else {
         char msg[1024];
         sprintf(msg, "The options argument contains the field \"%s\".\n"
@@ -137,7 +139,7 @@ void mexFunction(int nlhs, mxArray*
   if (!mxIsStruct(solinit))
     mexErrMsgIdAndTxt("bvp1d:arg3_not_struct", 
     "Argument three must be a struct.");
-  const char *fieldNames[] = { "x", "y", "solver", "error", "parameters" };
+  const char *fieldNames[] = { "x", "y", "solver", "parameters" };
   const int numReqFields = 2;
     mxArray *mxFlds[numReqFields];
   for (int i = 0; i < numReqFields; i++) {
@@ -150,7 +152,7 @@ void mexFunction(int nlhs, mxArray*
     }
   }
 
-  int numFields = numReqFields + 2;
+  int numFields = numReqFields + 1;
   RealVector parameters;
   mxArray *mxParams = mxGetField(solinit, 0, "parameters");
   MexInterface mexInt;
@@ -180,7 +182,7 @@ void mexFunction(int nlhs, mxArray*
       mexErrMsgIdAndTxt("bvp1d:solve_failure",
       "Unable to solve BVP.");
     mxSetField(sol, 0, "solver", mxCreateString("bvp4c"));
-    mxSetField(sol, 0, "x", mexInt.toMxArray(mesh.transpose()));
+    mxSetField(sol, 0, "x", mexInt.toMxArray(bvp.getMesh().transpose()));
     mxSetField(sol, 0, "y", mexInt.toMxArray(y));
     mxSetField(sol, 0, "error", mexInt.toMxArray(bvp.getError()));
     if (mxParams)
@@ -192,9 +194,5 @@ void mexFunction(int nlhs, mxArray*
   catch (...) {
     mexErrMsgIdAndTxt("bvp1d:internal_err", "Internal error in bvp1d.\n");
   }
-#if 1
-  // for now just return the input mesh
-  //mxSetField(sol, 0, "x", mxX);
-#endif
   plhs[0] = sol;
 }

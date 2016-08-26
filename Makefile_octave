@@ -2,13 +2,14 @@ CC=mkoctfile -mex
 CXX=mkoctfile -mex
 
 ifeq ($(findstring Windows, $(OS)),Windows)
-EIGEN=$(HOME)/src/Eigen/eigen-3.2.6
-OCTAVE_ROOT=c:/Octave/Octave-4.0.0
-OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.0/octave
-SUNDIALS_ROOT=$(HOME)/src/sundials-2.6.2/
-SUNDIALS_INC=-I$(SUNDIALS_ROOT)/src -I$(SUNDIALS_ROOT)/include -I./
-SUNDIALS_LDIR=$(SUNDIALS_ROOT)
-LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/4.0.0 -loctave.dll -loctinterp.dll
+	EIGEN=$(HOME)/src/Eigen/eigen-3.2.6
+	BOOST_ROOT=C:/boost/boost_1_57_0
+	OCTAVE_ROOT=c:/Octave/Octave-4.0.0
+	OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.0/octave
+	SUNDIALS_ROOT=$(HOME)/src/sundials-2.6.2/
+	SUNDIALS_INC=-I$(SUNDIALS_ROOT)/src -I$(SUNDIALS_ROOT)/include -I./
+	SUNDIALS_LDIR=$(SUNDIALS_ROOT)
+	LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/4.0.0 -loctave.dll -loctinterp.dll
 else
     UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
@@ -19,28 +20,28 @@ else
       SUNDIALS_LDIR=/usr/local/lib
       SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include -I./ 
 		endif
-#EIGEN=/opt/local/include/eigen3
-#EIGEN=/usr/include/eigen3
-#OCTAVE_ROOT=/opt/octave/current
-#OCTAVE_ROOT=/opt/octave-4.0.0
-#OCTAVE_INC=$(OCTAVE_ROOT)/opt/octave/current/include/octave-4.1.0+/octave/
-#OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.2/octave
-#SUNDIALS_ROOT=/opt/sundials/2.6.2
-#SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
-#SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include -I./pde1dmex 
-#SUNDIALS_LDIR=/usr/local/lib
+		ifeq ($(UNAME_S),Darwin)
+		  EIGEN=$(HOME)/src/eigen/eigen-3.2.9
+			OCTAVE_ROOT=/Applications/Octave.app/Contents/Resources/usr
+			OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.2/octave
+			SUNDIALS_ROOT=$(HOME)/sundials_inst
+			SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include
+			SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
+			BOOST_ROOT=/opt/local/include
+			OSNAME=macos32
+		endif
 endif
 
-INC=-I$(EIGEN) -I$(OCTAVE_INC) $(SUNDIALS_INC)
+INC=-I$(EIGEN) -I$(OCTAVE_INC) $(SUNDIALS_INC) -I$(BOOST_ROOT)
 
 CXXFLAGS= -g -O2 -std=gnu++0x -Wno-deprecated-declarations $(INC)
 
 LIBS=$(SUNDIALS_LDIR)/libsundials_ida.a $(SUNDIALS_LDIR)/libsundials_nvecserial.a \
      $(SUNDIALS_LDIR)/libsundials_kinsol.a $(LIB_OCT)
 
-OBJS=bvp1d.o  BVP1DImpl.o  MexInterface.o
+OBJS= bvp1d.o  BVP1DImpl.o  GaussLobattoIntRule.o  MexInterface.o  SunVector.o
 
-bvp1d.mex: $(OBJS)
+bvp1d.mex:$(OBJS)
 	mkoctfile -mex  $(OBJS) $(LIBS) -o bvp1d.mex
 
 clean:

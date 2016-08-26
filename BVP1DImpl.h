@@ -41,9 +41,12 @@ public:
   template<class T1, class T2>
   void calcPhi(const T1 &y, T2 &phi);
   template<class T>
-  void calcError(const T &u, RealVector &err);
+  void calcError(const T &u);
   const RealVector &getError() {
     return residualError;
+  }
+  const RealVector &getMesh() {
+    return mesh;
   }
   int batheTest();
   int solve(RealMatrix &solMat, RealVector &paramVec);
@@ -51,14 +54,18 @@ public:
   SparseMat J;
   RealVector rhs;
 private:
+  int solveFixedMesh(RealMatrix &solMat, RealVector &paramVec);
+  void refineMesh(const RealMatrix &sol, RealVector &newMesh, RealMatrix &newInitSoln);
   BVPDefn &bvp;
   RealVector &initMesh, mesh;
-  RealMatrix &yInit;
+  RealMatrix &initSolution;
   RealVector parameters;
+  RealMatrix currentInitSoln;
   const BVP1dOptions &options;
-  int numNodes, numDepVars, numParams;
+  int numDepVars, numParams;
   RealVector gVec, fi, fim1, fim2, yim2;
   RealMatrix fRHS;
   RealVector residualError;
+  void *kmem;
 };
 

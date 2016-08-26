@@ -26,6 +26,7 @@ using std::endl;
 #include "cubicInterp.h"
 #include "BVP1dOptions.h"
 #include "GaussLobattoIntRule.h"
+#include "SunVector.h"
 
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
@@ -46,6 +47,7 @@ typedef Eigen::Map<Eigen::MatrixXd> MapMat;
 template<class T1, class T2>
 void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
 {
+  const int numNodes = mesh.size();
   Eigen::Map<const Eigen::MatrixXd> yMat(y.data(), numDepVars, numNodes);
   if (numParams) {
     parameters = y.segment(numDepVars*numNodes, numParams);
@@ -75,7 +77,7 @@ void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
 }
 
 template<class T>
-void BVP1DImpl::calcError(const T &u, RealVector &err)
+void BVP1DImpl::calcError(const T &u)
 {
   GaussLobattoIntRule intRule(5);
   const int numIntPts = 3;
@@ -83,6 +85,7 @@ void BVP1DImpl::calcError(const T &u, RealVector &err)
   for (int i = 0; i < numIntPts; i++)
     intPts[i] = intRule.getPoint(i + 1);
 
+  const int numNodes = mesh.size();
   Eigen::Map<const Eigen::MatrixXd> y(u.data(), numDepVars, numNodes);
 
   if (numParams) 
@@ -140,7 +143,7 @@ namespace {
   }
 
   void prtLocVec(N_Vector v, const char *name) {
-    printf("Vector: %s, loc(v)=%d, loc(v.data)=%d\n", name, v, NV_DATA_S(v));
+    printf("Vector: %s, loc(v)=%p, loc(v.data)=%p\n", name, v, NV_DATA_S(v));
   }
 
   int funcBathe(N_Vector u, N_Vector f, void *user_data) {
@@ -230,19 +233,19 @@ namespace {
 
 BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &initMesh, RealMatrix &yInit,
   RealVector &parameters, BVP1dOptions &options) :
-  bvp(bvp), initMesh(initMesh), yInit(yInit), parameters(parameters),
+  bvp(bvp), initMesh(initMesh), initSolution(yInit), parameters(parameters),
   options(options)
 {
+  kmem = 0;
   mesh = initMesh;
+  currentInitSoln = initSolution;
   if (yInit.cols() != mesh.size())
     throw BVP1dException("bvp1d:solinit_x_y_inconsistent",
     "The number of columns in y must equal the length of the x array.");
   numDepVars = yInit.rows();
-  numNodes = mesh.rows();
   numParams = parameters.size();
   gVec.resize(numDepVars + numParams);
   fi.resize(numDepVars);
-  fRHS.resize(numDepVars, numNodes);
   fim1.resize(numDepVars);
   fim2.resize(numDepVars);
   yim2.resize(numDepVars);
@@ -255,6 +258,7 @@ BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &initMesh, RealMatrix &yInit,
 
 BVP1DImpl::~BVP1DImpl()
 {
+  if (kmem) KINFree(&kmem);
 }
 
 int BVP1DImpl::batheTest() {
@@ -312,8 +316,8 @@ int BVP1DImpl::batheTest() {
   if (check_flag(&flag, "KINSlsSetSparseJacFn", 1)) return(1);
 #endif
 
-  N_Vector scale = N_VNew_Serial(n);
-  N_VConst_Serial(1, scale);
+  SunVector scale(n);
+  N_VConst_Serial(1, scale());
 
   /* Call main solver */
   int strat = KIN_PICARD;
@@ -322,8 +326,8 @@ int BVP1DImpl::batheTest() {
   flag = KINSol(kmem,           /* KINSol memory block */
     u,         /* initial guess on input; solution vector */
     strat,     /* global strategy choice */
-    scale,          /* scaling vector, for the variable cc */
-    scale);         /* scaling vector for function values fval */
+    scale(),          /* scaling vector, for the variable cc */
+    scale());         /* scaling vector for function values fval */
   if (check_flag(&flag, "KINSol", 1)) return(1);
 
   prtLocVec(u, "u_main");
@@ -335,23 +339,108 @@ int BVP1DImpl::batheTest() {
 
 int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
 {
+  int nMax = options.getNMax();
+  if (nMax < 0) {
+    nMax = (int)std::floor(1000. / numDepVars);
+  }
+  const double o3 = 1. / 3.;
+  double relTol = options.getRelTol();
+  double maxErr = 0;
+  while (true) {
+    const int numNodes = mesh.size();
+    int err = solveFixedMesh(solMat, paramVec);
+    if (err) return err;
+    maxErr = residualError.maxCoeff();
+    if (maxErr <= relTol)
+      return 0;
+    // refine mesh
+    RealVector newMesh;
+    RealMatrix newInitSoln;
+    refineMesh(solMat, newMesh, newInitSoln);
+    //cout << "newMesh\n" << newMesh << endl;
+    //cout << "newInitSoln\n" << newInitSoln.transpose() << endl;
+    if (newMesh.size() > nMax)
+      break;
+    mesh = newMesh;
+    currentInitSoln = newInitSoln;
+  }
+
+  printf("Maximum residual error of %11.3e exceeds RelTol value of %11.3e.\n",
+    maxErr, relTol);
+
+  return 0;
+}
+
+void BVP1DImpl::refineMesh(const RealMatrix &sol, RealVector &newMesh,
+  RealMatrix &newInitSoln)
+{
+  const double o3 = 1. / 3.;
+  double relTol = options.getRelTol();
+  const int numNodes = mesh.size();
+  int numEl = numNodes - 1;
+  const int maxNewNodes = numNodes + 2 * numEl;
+  newMesh.resize(maxNewNodes);
+  newInitSoln.resize(numDepVars, maxNewNodes);
+  int numNewN = 1;
+  newMesh[0] = mesh[0];
+  newInitSoln.col(0) = sol.col(0);
+  for (int e = 0; e < numEl; e++) {
+    double errE = residualError[e];
+    double h = mesh[e + 1] - mesh[e];
+    if (errE > 100 * relTol) {
+      // add two new points in this interval
+      double h3 = h / 3;
+      newMesh[numNewN] = mesh[e] + h3;
+      newMesh[numNewN + 1] = mesh[e] + 2 * h3;
+      Eigen::Ref<Eigen::VectorXd> cN = newInitSoln.col(numNewN);
+      cubicInterp(sol.col(e), fRHS.col(e),
+        sol.col(e + 1), fRHS.col(e + 1),
+        h, -o3, cN, fim2);
+      Eigen::Ref<Eigen::VectorXd> cN1 = newInitSoln.col(numNewN+1);
+      cubicInterp(sol.col(e), fRHS.col(e),
+        sol.col(e + 1), fRHS.col(e + 1),
+        h, o3, cN1, fim2);
+      numNewN += 2;
+    }
+    else if (errE > relTol) {
+      // add one new point in this interval
+      double h2 = h / 2;
+      newMesh[numNewN] = mesh[e] + h2;
+      Eigen::Ref<Eigen::VectorXd> cN = newInitSoln.col(numNewN);
+      cubicInterp(sol.col(e), fRHS.col(e),
+        sol.col(e + 1), fRHS.col(e + 1), h, 0, cN, fim2);
+      numNewN++;
+    }
+    newMesh[numNewN] = mesh[e + 1];
+    newInitSoln.col(numNewN) = sol.col(e + 1);
+    numNewN++;
+  }
+  newMesh.conservativeResize(numNewN);
+  newInitSoln.conservativeResize(numDepVars, numNewN);
+  //printf("Num nodes: old mesh=%d, new mesh=%d\n", numNodes, numNewN);
+}
+
+int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealVector &paramVec)
+{
+  const int numNodes = mesh.size();
   const int numYEqns = numDepVars*numNodes;
   const int neq = numYEqns + numParams;
   solMat.resize(numDepVars, numNodes);
+  fRHS.resize(numDepVars, numNodes);
 
-  N_Vector u = N_VNew_Serial(neq);
-  double *uData = NV_DATA_S(u);
+  SunVector u(neq);
+  double *uData = &u[0];
   MapMat uMat(uData, numDepVars, numNodes);
-  uMat = yInit;
+  uMat = currentInitSoln;
   //cout << "yInit\n" << uMat << endl;
   if (numParams) {
     std::copy_n(parameters.data(), numParams, &uData[numYEqns]);
     paramVec.resize(numParams);
   }
 
-  void *kmem = KINCreate();
+  kmem = KINCreate();
   if (check_flag((void *) kmem, "KINCreate", 0)) return(1);
-  int flag = KINInit(kmem, funcKinsol, u);
+  int flag = KINInit(kmem, funcKinsol, u());
   if (check_flag(&flag, "KINInit", 1)) return(1);
   int ier = KINSetUserData(kmem, this);
   if (check_flag(&ier, "KINSetUserData", 1)) return(1);
@@ -365,28 +454,30 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
   flag = KINDense(kmem, neq);
   if (check_flag(&flag, "KINDense", 1)) return(1);
 
-  N_Vector scale = N_VNew_Serial(neq);
-  N_VConst_Serial(1, scale);
+  SunVector scale(neq);
+  scale.setConstant(1);
 
   /* Call main solver */
   int strat = KIN_PICARD;
   strat = KIN_NONE;
   strat = KIN_LINESEARCH;
   flag = KINSol(kmem,           /* KINSol memory block */
-    u,         /* initial guess on input; solution vector */
+    u(),         /* initial guess on input; solution vector */
     strat,     /* global strategy choice */
-    scale,          /* scaling vector, for the variable cc */
-    scale);         /* scaling vector for function values fval */
+    scale(),          /* scaling vector, for the variable cc */
+    scale());         /* scaling vector for function values fval */
   if (check_flag(&flag, "KINSol", 1)) return(1);
 
   //cout << uMat << endl;
   MapVec uVec(uData, neq);
-  RealVector err;
-  calcError(uVec, err);
+  calcError(uVec);
 
   solMat = uMat;
   if (numParams)
     std::copy_n(&uData[numYEqns], numParams, paramVec.data());
+
+  KINFree(&kmem);
+  kmem = 0;
 
   return 0;
 }
