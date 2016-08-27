@@ -49,12 +49,13 @@ public:
     return mesh;
   }
   int batheTest();
-  int solve(RealMatrix &solMat, RealVector &paramVec);
+  int solve(RealMatrix &solMat, RealMatrix &yPrime, RealVector &paramVec);
   static RealVector linspace(double start, double end, int n);
   SparseMat J;
   RealVector rhs;
 private:
-  int solveFixedMesh(RealMatrix &solMat, RealVector &paramVec);
+  int solveFixedMesh(RealMatrix &solMat, RealMatrix &yPrime, 
+    RealVector &paramVec);
   void refineMesh(const RealMatrix &sol, RealVector &newMesh, RealMatrix &newInitSoln);
   BVPDefn &bvp;
   RealVector &initMesh, mesh;

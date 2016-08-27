@@ -139,7 +139,7 @@ void mexFunction(int nlhs, mxArray*
   if (!mxIsStruct(solinit))
     mexErrMsgIdAndTxt("bvp1d:arg3_not_struct", 
     "Argument three must be a struct.");
-  const char *fieldNames[] = { "x", "y", "solver", "parameters" };
+  const char *fieldNames[] = { "x", "y", "solver", "yp", "parameters" };
   const int numReqFields = 2;
     mxArray *mxFlds[numReqFields];
   for (int i = 0; i < numReqFields; i++) {
@@ -152,7 +152,7 @@ void mexFunction(int nlhs, mxArray*
     }
   }
 
-  int numFields = numReqFields + 1;
+  int numFields = numReqFields + 2;
   RealVector parameters;
   mxArray *mxParams = mxGetField(solinit, 0, "parameters");
   MexInterface mexInt;
@@ -175,15 +175,16 @@ void mexFunction(int nlhs, mxArray*
     if (nrhs == 4)
       opts = getOptions(prhs[3]);
     BVP1DImpl bvp(bvpDef, mesh, yInit, parameters, opts);
-    RealMatrix y;
+    RealMatrix y, yPrime;
     RealVector p;
-    int err = bvp.solve(y, p);
+    int err = bvp.solve(y, yPrime, p);
     if (err)
       mexErrMsgIdAndTxt("bvp1d:solve_failure",
       "Unable to solve BVP.");
     mxSetField(sol, 0, "solver", mxCreateString("bvp4c"));
     mxSetField(sol, 0, "x", mexInt.toMxArray(bvp.getMesh().transpose()));
     mxSetField(sol, 0, "y", mexInt.toMxArray(y));
+    mxSetField(sol, 0, "yp", mexInt.toMxArray(yPrime));
     mxSetField(sol, 0, "error", mexInt.toMxArray(bvp.getError()));
     if (mxParams)
       mxSetField(sol, 0, "parameters", mexInt.toMxArray(p));

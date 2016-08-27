@@ -337,7 +337,8 @@ int BVP1DImpl::batheTest() {
   return 0;
 }
 
-int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
+int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime, 
+  RealVector &paramVec)
 {
   int nMax = options.getNMax();
   if (nMax < 0) {
@@ -348,7 +349,7 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealVector &paramVec)
   double maxErr = 0;
   while (true) {
     const int numNodes = mesh.size();
-    int err = solveFixedMesh(solMat, paramVec);
+    int err = solveFixedMesh(solMat, yPrime, paramVec);
     if (err) return err;
     maxErr = residualError.maxCoeff();
     if (maxErr <= relTol)
@@ -420,7 +421,8 @@ void BVP1DImpl::refineMesh(const RealMatrix &sol, RealVector &newMesh,
   //printf("Num nodes: old mesh=%d, new mesh=%d\n", numNodes, numNewN);
 }
 
-int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealVector &paramVec)
+int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime, 
+  RealVector &paramVec)
 {
   const int numNodes = mesh.size();
   const int numYEqns = numDepVars*numNodes;
@@ -473,6 +475,7 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealVector &paramVec)
   calcError(uVec);
 
   solMat = uMat;
+  yPrime = fRHS;
   if (numParams)
     std::copy_n(&uData[numYEqns], numParams, paramVec.data());
 
