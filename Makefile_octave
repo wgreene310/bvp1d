@@ -19,6 +19,7 @@ else
       SUNDIALS_ROOT=/usr/local/include/sundials
       SUNDIALS_LDIR=/usr/local/lib
       SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include -I./ 
+			BOOST_ROOT=/usr/include
 		endif
 		ifeq ($(UNAME_S),Darwin)
 		  EIGEN=$(HOME)/src/eigen/eigen-3.2.9
@@ -28,7 +29,6 @@ else
 			SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include
 			SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
 			BOOST_ROOT=/opt/local/include
-			OSNAME=macos32
 		endif
 endif
 
