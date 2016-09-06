@@ -48,11 +48,8 @@ public:
   const RealVector &getMesh() {
     return mesh;
   }
-  int batheTest();
   int solve(RealMatrix &solMat, RealMatrix &yPrime, RealVector &paramVec);
   static RealVector linspace(double start, double end, int n);
-  SparseMat J;
-  RealVector rhs;
 private:
   int solveFixedMesh(RealMatrix &solMat, RealMatrix &yPrime, 
     RealVector &paramVec);

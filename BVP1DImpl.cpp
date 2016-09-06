@@ -19,8 +19,6 @@
 using std::cout;
 using std::endl;
 
-#define USE_KLU 0
-
 #include "BVP1DImpl.h"
 #include "BVP1dException.h"
 #include "cubicInterp.h"
@@ -32,13 +30,6 @@ using std::endl;
 #include <sundials/sundials_types.h>
 #include <kinsol/kinsol.h>
 #include <kinsol/kinsol_dense.h>
-#if USE_KLU
-#include <kinsol/kinsol_klu.h>
-#endif
-
-#if 0
-#include <FDJacobian.h>
-#endif
 
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
@@ -146,76 +137,30 @@ namespace {
     printf("Vector: %s, loc(v)=%p, loc(v.data)=%p\n", name, v, NV_DATA_S(v));
   }
 
-  int funcBathe(N_Vector u, N_Vector f, void *user_data) {
-
-    BVP1DImpl *bvp = (BVP1DImpl*) user_data;
-
-    int neq = NV_LENGTH_S(u);
-    MapVec uVec(NV_DATA_S(u), neq);
-    
-    prtLocVec(u, "u_res");
-
-    MapVec fVec(NV_DATA_S(f), neq);
-
-    //cout << bvp->J << endl;
-    fVec = bvp->J*uVec - bvp->rhs;
-    //cout << "J*u=" << (bvp->J*uVec).transpose() << endl;
-    cout << "u=" << uVec.transpose() << endl;
-    cout << "f=" << fVec.transpose() << endl;
-
-    return 0;
-  }
-
-#if USE_KLU
-  int jacBathe(N_Vector u, N_Vector f, SlsMat Jac, void *user_data,
-    N_Vector tmp1, N_Vector tmp2) {
-    prtLocVec(u, "u_jac");
-    BVP1DImpl *bvp = (BVP1DImpl*) user_data;
-    SparseMat &jacEig = bvp->J;
-    int neq = NV_LENGTH_S(u);
-    int nnz = jacEig.nonZeros();
-    std::copy_n(jacEig.outerIndexPtr(), neq + 1, Jac->colptrs);
-    std::copy_n(jacEig.innerIndexPtr(), nnz, Jac->rowvals);
-    std::copy_n(jacEig.valuePtr(), nnz, Jac->data);
-    Jac->NNZ = nnz;
-    //PrintSparseMat(Jac);
-
-    return 0;
-  }
-#endif
-
-  static int check_flag(void *flagvalue, const char *funcname, int opt)
+  void check_flag(void *flagvalue, const char *funcname, int opt)
   {
     int *errflag;
 
     /* Check if SUNDIALS function returned NULL pointer - no memory allocated */
     if (opt == 0 && flagvalue == NULL) {
-      fprintf(stderr,
+      char msg[256];
+      sprintf(msg,
         "\nSUNDIALS_ERROR: %s() failed - returned NULL pointer\n\n",
         funcname);
-      return(1);
+      throw BVP1dException("bvp1d:sundials_mem_alloc", msg);
     }
 
     /* Check if flag < 0 */
     else if (opt == 1) {
       errflag = (int *)flagvalue;
       if (*errflag < 0) {
-        fprintf(stderr,
+        char msg[256];
+        sprintf(msg,
           "\nSUNDIALS_ERROR: %s() failed with flag = %d\n\n",
           funcname, *errflag);
-        return(1);
+        throw BVP1dException("bvp1d:sundials_error", msg);
       }
     }
-
-    /* Check if function returned NULL pointer - no memory allocated */
-    else if (opt == 2 && flagvalue == NULL) {
-      fprintf(stderr,
-        "\nMEMORY_ERROR: %s() failed - returned NULL pointer\n\n",
-        funcname);
-      return(1);
-    }
-
-    return(0);
   }
 
   int funcKinsol(N_Vector y, N_Vector phi, void *user_data) {
@@ -259,82 +204,6 @@ BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &initMesh, RealMatrix &yInit,
 BVP1DImpl::~BVP1DImpl()
 {
   if (kmem) KINFree(&kmem);
-}
-
-int BVP1DImpl::batheTest() {
-  typedef Eigen::Triplet<double> Triplet;
-  Eigen::Triplet<double> triplets[] = { Triplet(0, 0, 2), Triplet(0, 1, -2), Triplet(0, 4, -1),
-    Triplet(1, 1, 3), Triplet(1, 2, -2),
-    Triplet(2, 2, 5), Triplet(2, 3, -3), Triplet(3, 3, 10),
-    Triplet(3, 4, 4), Triplet(4, 4, 10) };
-  const int n = 5;
-  
-  //printf("nnz=%d\n", nnz);
-  std::vector<Triplet> eigTriplets;
-  for (int i = 0; i<sizeof(triplets) / sizeof(triplets[0]); i++) {
-    const Triplet &t = triplets[i];
-    int r = t.row();
-    int c = t.col();
-    eigTriplets.push_back(t);
-    if (r != c)
-      eigTriplets.push_back(Triplet(c, r, t.value()));
-  }
-
-  J.resize(n, n);
-  J.setFromTriplets(eigTriplets.begin(), eigTriplets.end());
-  const int nnz = J.nonZeros();
-
-  //cout << J << endl;
-  //print(J);
-
-  rhs.resize(n);
-  rhs << 0, 1, 0, 0, 0;
-  Eigen::VectorXd uExact(n);
-  uExact << 636., 619., 292., 74., 34.;
-
-  //cout << J*uExact << endl;
-
-  N_Vector u = N_VNew_Serial(n);
-  prtLocVec(u, "u_main");
-  MapVec uVec(NV_DATA_S(u), n);
-  uVec.setConstant(1);
-  
-  void *kmem = KINCreate();
-  if (check_flag((void *)kmem, "KINCreate", 0)) return(1);
-  int flag = KINInit(kmem, funcBathe, u);
-  if (check_flag(&flag, "KINInit", 1)) return(1);
-  int ier = KINSetUserData(kmem, this);
-  if (check_flag(&ier, "KINSetUserData", 1)) return(1);
-  /* Specify stopping tolerance based on residual */
-  double fnormtol = 1e-8;
-  flag = KINSetFuncNormTol(kmem, fnormtol);
-  if (check_flag(&flag, "KINSetFuncNormTol", 1)) return(1);
-#if USE_KLU
-  flag = KINKLU(kmem, n, nnz);
-  if (check_flag(&flag, "KINKLU", 1)) return(1);
-  flag = KINSlsSetSparseJacFn(kmem, jacBathe);
-  if (check_flag(&flag, "KINSlsSetSparseJacFn", 1)) return(1);
-#endif
-
-  SunVector scale(n);
-  N_VConst_Serial(1, scale());
-
-  /* Call main solver */
-  int strat = KIN_PICARD;
-  strat = KIN_NONE;
-  strat = KIN_LINESEARCH;
-  flag = KINSol(kmem,           /* KINSol memory block */
-    u,         /* initial guess on input; solution vector */
-    strat,     /* global strategy choice */
-    scale(),          /* scaling vector, for the variable cc */
-    scale());         /* scaling vector for function values fval */
-  if (check_flag(&flag, "KINSol", 1)) return(1);
-
-  prtLocVec(u, "u_main");
-
-  cout << uVec << endl;
-
-  return 0;
 }
 
 int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime, 
@@ -441,34 +310,36 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   }
 
   kmem = KINCreate();
-  if (check_flag((void *) kmem, "KINCreate", 0)) return(1);
+  check_flag((void *) kmem, "KINCreate", 0);
   int flag = KINInit(kmem, funcKinsol, u());
-  if (check_flag(&flag, "KINInit", 1)) return(1);
+  check_flag(&flag, "KINInit", 1);
   int ier = KINSetUserData(kmem, this);
-  if (check_flag(&ier, "KINSetUserData", 1)) return(1);
+  check_flag(&ier, "KINSetUserData", 1);
   /* Specify stopping tolerance based on residual */
   double fnormtol = options.getAbsTol();
   double scsteptol = fnormtol;
   flag = KINSetFuncNormTol(kmem, fnormtol);
-  if (check_flag(&flag, "KINSetFuncNormTol", 1)) return(1);
+  check_flag(&flag, "KINSetFuncNormTol", 1);
   flag = KINSetScaledStepTol(kmem, scsteptol);
-  if (check_flag(&flag, "KINSetScaledStepTol", 1)) return(1);
+  check_flag(&flag, "KINSetScaledStepTol", 1);
   flag = KINDense(kmem, neq);
-  if (check_flag(&flag, "KINDense", 1)) return(1);
+  check_flag(&flag, "KINDense", 1);
 
   SunVector scale(neq);
   scale.setConstant(1);
 
+  const double mxnewtstep = 1e5;
+  flag = KINSetMaxNewtonStep(kmem, mxnewtstep);
+  check_flag(&flag, "KINSetMaxNewtonStep", 1);
+
   /* Call main solver */
-  int strat = KIN_PICARD;
-  strat = KIN_NONE;
-  strat = KIN_LINESEARCH;
+  int strat = KIN_LINESEARCH;
   flag = KINSol(kmem,           /* KINSol memory block */
     u(),         /* initial guess on input; solution vector */
     strat,     /* global strategy choice */
     scale(),          /* scaling vector, for the variable cc */
     scale());         /* scaling vector for function values fval */
-  if (check_flag(&flag, "KINSol", 1)) return(1);
+  check_flag(&flag, "KINSol", 1);
 
   //cout << uMat << endl;
   MapVec uVec(uData, neq);

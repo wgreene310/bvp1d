@@ -28,6 +28,7 @@ using std::endl;
 #include "BVP1DImpl.h"
 #include "MexInterface.h"
 #include "BVP1dOptions.h"
+#include "BVP1dException.h"
 
 #define FUNC_NAME "bvp1d"
 
@@ -188,6 +189,9 @@ void mexFunction(int nlhs, mxArray*
     mxSetField(sol, 0, "error", mexInt.toMxArray(bvp.getError()));
     if (mxParams)
       mxSetField(sol, 0, "parameters", mexInt.toMxArray(p));
+  }
+  catch (const BVP1dException &ex) {
+    mexErrMsgIdAndTxt(ex.getId(), ex.what());
   }
   catch (const std::exception &ex) {
     mexErrMsgIdAndTxt("bvp1d:exception", ex.what());
