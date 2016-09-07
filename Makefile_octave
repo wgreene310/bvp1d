@@ -9,7 +9,8 @@ ifeq ($(findstring Windows, $(OS)),Windows)
 	SUNDIALS_ROOT=$(HOME)/src/sundials-2.6.2/
 	SUNDIALS_INC=-I$(SUNDIALS_ROOT)/src -I$(SUNDIALS_ROOT)/include -I./
 	SUNDIALS_LDIR=$(SUNDIALS_ROOT)
-	LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/4.0.0 -loctave.dll -loctinterp.dll
+	LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/4.0.0
+	LIB_LAPACK=-llapack.dll -lopenblas.dll
 else
     UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
@@ -29,6 +30,7 @@ else
 			SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include
 			SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
 			BOOST_ROOT=/opt/local/include
+			LIB_LAPACK=-llapack -lblas
 		endif
 endif
 
@@ -37,7 +39,7 @@ INC=-I$(EIGEN) -I$(OCTAVE_INC) $(SUNDIALS_INC) -I$(BOOST_ROOT)
 CXXFLAGS= -g -O2 -std=gnu++0x -Wno-deprecated-declarations $(INC)
 
 LIBS=$(SUNDIALS_LDIR)/libsundials_ida.a $(SUNDIALS_LDIR)/libsundials_nvecserial.a \
-     $(SUNDIALS_LDIR)/libsundials_kinsol.a $(LIB_OCT)
+     $(SUNDIALS_LDIR)/libsundials_kinsol.a $(LIB_OCT) $(LIB_LAPACK)
 
 OBJS= bvp1d.o  BVP1DImpl.o  GaussLobattoIntRule.o  MexInterface.o  SunVector.o
 

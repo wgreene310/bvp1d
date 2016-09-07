@@ -26,10 +26,15 @@ using std::endl;
 #include "GaussLobattoIntRule.h"
 #include "SunVector.h"
 
+#define USE_LAPACK 1
+
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
 #include <kinsol/kinsol.h>
 #include <kinsol/kinsol_dense.h>
+#if USE_LAPACK
+#include <kinsol/kinsol_lapack.h>
+#endif
 
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
@@ -322,8 +327,13 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   check_flag(&flag, "KINSetFuncNormTol", 1);
   flag = KINSetScaledStepTol(kmem, scsteptol);
   check_flag(&flag, "KINSetScaledStepTol", 1);
+#if USE_LAPACK
+  flag = KINLapackDense(kmem, neq);
+  check_flag(&flag, "KINLapackDense", 1);
+#else
   flag = KINDense(kmem, neq);
   check_flag(&flag, "KINDense", 1);
+#endif
 
   SunVector scale(neq);
   scale.setConstant(1);
