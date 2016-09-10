@@ -25,8 +25,12 @@ using std::endl;
 #include "BVP1dOptions.h"
 #include "GaussLobattoIntRule.h"
 #include "SunVector.h"
+#include "FiniteDiffJacobian.h"
+#include <FiniteDiffJacobianFull.h>
+#include "BVPSolverStats.h"
 
-#define USE_LAPACK 1
+#define USE_LAPACK 0
+#define USE_KLU 1
 
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
@@ -34,6 +38,9 @@ using std::endl;
 #include <kinsol/kinsol_dense.h>
 #if USE_LAPACK
 #include <kinsol/kinsol_lapack.h>
+#endif
+#if USE_KLU
+#include <kinsol/kinsol_klu.h>
 #endif
 
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
@@ -138,10 +145,6 @@ namespace {
     }
   }
 
-  void prtLocVec(N_Vector v, const char *name) {
-    printf("Vector: %s, loc(v)=%p, loc(v.data)=%p\n", name, v, NV_DATA_S(v));
-  }
-
   void check_flag(void *flagvalue, const char *funcname, int opt)
   {
     int *errflag;
@@ -168,6 +171,18 @@ namespace {
     }
   }
 
+  SparseMat toEigen(SlsMat a) {
+    SparseMat A(a->M, a->N);
+    auto nnz = a->NNZ;
+    //A.reserve(nnz);
+    A.resizeNonZeros(nnz);
+    std::copy_n(a->colptrs, a->N + 1, A.outerIndexPtr());
+    std::copy_n(a->rowvals, nnz, A.innerIndexPtr());
+    std::copy_n(a->data, nnz, A.valuePtr());
+    A.makeCompressed();
+    return A;
+  }
+
   int funcKinsol(N_Vector y, N_Vector phi, void *user_data) {
 
     BVP1DImpl *bvp = (BVP1DImpl*) user_data;
@@ -177,6 +192,32 @@ namespace {
     bvp->calcPhi(yVec, phiVec);
     return 0;
   }
+
+#if USE_KLU
+
+  int jacKinsol(N_Vector u, N_Vector f, SlsMat Jac, void *user_data,
+    N_Vector tmp1, N_Vector tmp2) {
+    BVP1DImpl *bvp = (BVP1DImpl*) user_data;
+
+    bvp->calcJacobianODE(u,  f, Jac);
+    
+    //PrintSparseMat(Jac);
+#if 0
+    // test sparse FD jacobian
+    FiniteDiffJacobianFull fdf;
+    Eigen::MatrixXd jacFull;
+    fdf.calcJacobian(u, f, funcKinsol, user_data, jacFull);
+    //cout << "full FD Jacobian\n" << jacFull << endl;
+    SparseMat jacEig = toEigen(Jac);
+    //cout << "sparse FD jacobian\n" << jacEig.toDense() << endl;
+    Eigen::MatrixXd jacDiff = jacFull - jacEig.toDense();
+    //cout << jacDiff  << endl;
+    printf("max FD diff=%12.3e\n", jacDiff.cwiseAbs().maxCoeff());
+#endif
+
+    return 0;
+  }
+#endif
 
 }
 
@@ -221,13 +262,17 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   const double o3 = 1. / 3.;
   double relTol = options.getRelTol();
   double maxErr = 0;
+  solverStats = std::make_unique<BVPSolverStats>(options.printStats());
   while (true) {
     const int numNodes = mesh.size();
     int err = solveFixedMesh(solMat, yPrime, paramVec);
     if (err) return err;
+    solverStats->update(kmem, mesh.size());
     maxErr = residualError.maxCoeff();
-    if (maxErr <= relTol)
+    if (maxErr <= relTol) {
+      solverStats->print();
       return 0;
+    }
     // refine mesh
     RealVector newMesh;
     RealMatrix newInitSoln;
@@ -242,6 +287,7 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
 
   printf("Maximum residual error of %11.3e exceeds RelTol value of %11.3e.\n",
     maxErr, relTol);
+  solverStats->print();
 
   return 0;
 }
@@ -314,6 +360,10 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
     paramVec.resize(numParams);
   }
 
+  if (kmem) {
+    KINFree(&kmem);
+    kmem = 0;
+  }
   kmem = KINCreate();
   check_flag((void *) kmem, "KINCreate", 0);
   int flag = KINInit(kmem, funcKinsol, u());
@@ -330,6 +380,17 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
 #if USE_LAPACK
   flag = KINLapackDense(kmem, neq);
   check_flag(&flag, "KINLapackDense", 1);
+#elif USE_KLU
+  SparseMat P;
+  calcJacPattern(P);
+  fDiffJac = std::make_unique<FiniteDiffJacobian>(P);
+  int nnz = P.nonZeros();
+  //cout << "jacobian pattern\n" << P.toDense() << endl;
+  //print(P);
+  flag = KINKLU(kmem, neq, nnz);
+  check_flag(&flag, "KINKLU", 1);
+  flag = KINSlsSetSparseJacFn(kmem, jacKinsol);
+  check_flag(&flag, "KINSlsSetSparseJacFn", 1);
 #else
   flag = KINDense(kmem, neq);
   check_flag(&flag, "KINDense", 1);
@@ -360,9 +421,6 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   if (numParams)
     std::copy_n(&uData[numYEqns], numParams, paramVec.data());
 
-  KINFree(&kmem);
-  kmem = 0;
-
   return 0;
 }
 
@@ -377,4 +435,56 @@ RealVector BVP1DImpl::linspace(double start, double end, int n)
     x += dx;
   }
   return v;
+}
+
+void BVP1DImpl::calcJacPattern(Eigen::SparseMatrix<double> &J) {
+  const int numNodes = mesh.size();
+  const int numYEqns = numDepVars*numNodes;
+  const int numFEMEqns = numYEqns + numParams;
+  J.resize(numFEMEqns, numFEMEqns);
+  int n2 = numDepVars*numDepVars;
+  int nel = numNodes - 1;
+
+  int nnz = 3 * n2*(nel + 1); // approximate nnz
+  J.reserve(nnz);
+  int numG = numDepVars + numParams;
+  int rowOff = numG;
+  int colOff = 0;
+  for (int n = 0; n < nel; n++) {
+    for (int i = 0; i < numDepVars; i++) {
+      for (int j = 0; j < numDepVars; j++) {
+          J.insert(i + rowOff, j + colOff) = 2;
+          J.insert(i + rowOff, j + colOff + numDepVars) = 2;
+        if (n < nel-1) {
+          J.insert(i + rowOff + numDepVars, j + colOff) = 3;
+        }
+      }
+    }
+    rowOff += numDepVars;
+    colOff += numDepVars;
+  }
+  // constraint and parameter equations
+  colOff = numYEqns - numDepVars;
+  for (int i = 0; i < numG; i++) {
+    for (int j = 0; j < numDepVars; j++) {
+      J.insert(i, j) = 4;
+      J.insert(i,  colOff + j) = 5;
+    }
+  }
+  // parameters may be used in all equations
+  colOff = numFEMEqns - numParams;
+  for (int i = 0; i < numFEMEqns; i++)
+    for (int j = 0; j < numParams; j++)
+      J.insert(i, colOff+j) = 6;
+
+
+  J.makeCompressed();
+}
+
+template<class T, class T2>
+void BVP1DImpl::calcJacobianODE(T &u, T &res, T2 Jac) {
+  int numFuncEvals;
+  fDiffJac->calcJacobian(u, res, funcKinsol, this, Jac,
+    &numFuncEvals);
+  solverStats->incrementJacobianFuncCalls(numFuncEvals);
 }

@@ -16,6 +16,7 @@
 #pragma once
 
 #include <vector>
+#include <memory>
 
 #include <Eigen/Core>
 #include <Eigen/SparseCore>
@@ -25,6 +26,8 @@ typedef Eigen::VectorXd RealVector;
 typedef Eigen::MatrixXd RealMatrix;
 
 class BVP1dOptions;
+class FiniteDiffJacobian;
+class BVPSolverStats;
 
 class BVP1DImpl {
 public:
@@ -50,10 +53,13 @@ public:
   }
   int solve(RealMatrix &solMat, RealMatrix &yPrime, RealVector &paramVec);
   static RealVector linspace(double start, double end, int n);
+  template<class T, class T2>
+  void calcJacobianODE(T &u,  T &R, T2 Jac);
 private:
   int solveFixedMesh(RealMatrix &solMat, RealMatrix &yPrime, 
     RealVector &paramVec);
   void refineMesh(const RealMatrix &sol, RealVector &newMesh, RealMatrix &newInitSoln);
+  void calcJacPattern(Eigen::SparseMatrix<double> &jac);
   BVPDefn &bvp;
   RealVector &initMesh, mesh;
   RealMatrix &initSolution;
@@ -65,5 +71,7 @@ private:
   RealMatrix fRHS;
   RealVector residualError;
   void *kmem;
+  std::unique_ptr<FiniteDiffJacobian> fDiffJac;
+  std::unique_ptr<BVPSolverStats> solverStats;
 };
 

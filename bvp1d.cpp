@@ -36,19 +36,33 @@ namespace {
   BVP1dOptions getOptions(const mxArray *opts) {
     if (!mxIsStruct(opts))
       mexErrMsgIdAndTxt("pde1d:optins_type",
-      "The 4th, options argument to " FUNC_NAME " must be a struct.");
-    BVP1dOptions pdeOpts;
+      "The options argument to " FUNC_NAME " must be a struct.");
+    BVP1dOptions bvpOpts;
     int n = mxGetNumberOfFields(opts);
     for (int i = 0; i < n; i++) {
       const char *ni = mxGetFieldNameByNumber(opts, i);
       mxArray *val = mxGetFieldByNumber(opts, 0, i);
       if (mxIsEmpty(val)) continue;
       if (boost::iequals(ni, "abstol"))
-        pdeOpts.setAbsTol(mxGetScalar(val));
+        bvpOpts.setAbsTol(mxGetScalar(val));
       else if (boost::iequals(ni, "reltol"))
-        pdeOpts.setRelTol(mxGetScalar(val));
+        bvpOpts.setRelTol(mxGetScalar(val));
       else if (boost::iequals(ni, "nmax"))
-        pdeOpts.setNMax((int) mxGetScalar(val));
+        bvpOpts.setNMax((int) mxGetScalar(val));
+      else if (boost::iequals(ni, "stats")) {
+        const int buflen = 1024;
+        char buf[buflen];
+        mxGetString(val, buf, buflen);
+        bool doStats;
+        if (boost::iequals(buf, "on"))
+          doStats = true;
+        else if (boost::iequals(buf, "off"))
+          doStats = false;
+        else
+          mexErrMsgIdAndTxt("bvp1d:invalidStats",
+          "The value of the \"Stats\" option must be either \"On\" or \"Off\".");
+        bvpOpts.setPrintStats(doStats);
+      }
       else {
         char msg[1024];
         sprintf(msg, "The options argument contains the field \"%s\".\n"
@@ -57,7 +71,7 @@ namespace {
         mexWarnMsgIdAndTxt("bvp1d:unknown_option", msg);
       }
     }
-    return pdeOpts;
+    return bvpOpts;
   }
 }
 
