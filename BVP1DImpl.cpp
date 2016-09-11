@@ -15,6 +15,7 @@
 
 #include <iostream>
 #include <limits>
+#include <memory>
 
 using std::cout;
 using std::endl;
@@ -26,7 +27,7 @@ using std::endl;
 #include "GaussLobattoIntRule.h"
 #include "SunVector.h"
 #include "FiniteDiffJacobian.h"
-#include <FiniteDiffJacobianFull.h>
+//#include <FiniteDiffJacobianFull.h>
 #include "BVPSolverStats.h"
 
 #define USE_LAPACK 0
@@ -262,7 +263,11 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   const double o3 = 1. / 3.;
   double relTol = options.getRelTol();
   double maxErr = 0;
+#if 0
   solverStats = std::make_unique<BVPSolverStats>(options.printStats());
+#else
+  solverStats = std::unique_ptr<BVPSolverStats>(new BVPSolverStats(options.printStats()));
+#endif
   while (true) {
     const int numNodes = mesh.size();
     int err = solveFixedMesh(solMat, yPrime, paramVec);
@@ -383,7 +388,11 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
 #elif USE_KLU
   SparseMat P;
   calcJacPattern(P);
+#if 0
   fDiffJac = std::make_unique<FiniteDiffJacobian>(P);
+#else
+  fDiffJac = std::unique_ptr<FiniteDiffJacobian>(new FiniteDiffJacobian(P));
+#endif
   int nnz = P.nonZeros();
   //cout << "jacobian pattern\n" << P.toDense() << endl;
   //print(P);

@@ -2,25 +2,32 @@ CC=mkoctfile -mex
 CXX=mkoctfile -mex
 
 ifeq ($(findstring Windows, $(OS)),Windows)
+  #REL=4.2.0-rc1
+	REL=4.0.0
 	EIGEN=$(HOME)/src/Eigen/eigen-3.2.6
 	BOOST_ROOT=C:/boost/boost_1_57_0
-	OCTAVE_ROOT=c:/Octave/Octave-4.0.0
-	OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.0/octave
+	OCTAVE_ROOT=c:/Octave/Octave-$(REL)
+	OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-$(REL)/octave
 	SUNDIALS_ROOT=$(HOME)/src/sundials-2.6.2/
 	SUNDIALS_INC=-I$(SUNDIALS_ROOT)/src -I$(SUNDIALS_ROOT)/include -I./
 	SUNDIALS_LDIR=$(SUNDIALS_ROOT)
-	LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/4.0.0
+	LIB_OCT=-L$(OCTAVE_ROOT)/lib/octave/$(REL)
 	LIB_LAPACK=-llapack.dll -lopenblas.dll
+	SUITESPARSE_LIB_DIR = $(HOME)/src/sparse_solvers/SuiteSparse/libs/mingw32
+	SUITESPARSE_LIBS=-L$(SUITESPARSE_LIB_DIR) \
+	                -lklu -lamd -lcolamd -lbtf -lsuitesparseconfig
 else
     UNAME_S := $(shell uname -s)
 		ifeq ($(UNAME_S),Linux)
 		  EIGEN=$(HOME)/src/Eigen/eigen-3.2.2
       OCTAVE_ROOT=/opt/octave-4.0.0
       OCTAVE_INC=$(OCTAVE_ROOT)/include/octave-4.0.2/octave
-      SUNDIALS_ROOT=/usr/local/include/sundials
-      SUNDIALS_LDIR=/usr/local/lib
-      SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include -I./ 
+      SUNDIALS_ROOT=$(HOME)/sundials
+      SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
+      SUNDIALS_INC=-I$(SUNDIALS_ROOT)/include
 			BOOST_ROOT=/usr/include
+	    SUITESPARSE_LIBS= -L/usr/lib/i386-linux-gnu -l:libklu.a -l:libamd.a \
+			                  -l:libcolamd.a -l:libbtf.a -lsuitesparseconfig
 		endif
 		ifeq ($(UNAME_S),Darwin)
 		  EIGEN=$(HOME)/src/eigen/eigen-3.2.9
@@ -31,17 +38,22 @@ else
 			SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
 			BOOST_ROOT=/opt/local/include
 			LIB_LAPACK=-llapack -lblas
+			SUITESPARSE_LIB_DIR=/opt/local/lib
+	    SUITESPARSE_LIBS=-L$(SUITESPARSE_LIB_DIR) \
+	                -lklu -lamd -lcolamd -lbtf -lsuitesparseconfig
 		endif
 endif
 
 INC=-I$(EIGEN) -I$(OCTAVE_INC) $(SUNDIALS_INC) -I$(BOOST_ROOT)
 
-CXXFLAGS= -g -O2 -std=gnu++0x -Wno-deprecated-declarations $(INC)
+CXXFLAGS= -g -O2 -DUSE_KLU=1 -std=gnu++0x -Wno-deprecated-declarations $(INC)
 
 LIBS=$(SUNDIALS_LDIR)/libsundials_ida.a $(SUNDIALS_LDIR)/libsundials_nvecserial.a \
-     $(SUNDIALS_LDIR)/libsundials_kinsol.a $(LIB_OCT) $(LIB_LAPACK)
+     $(SUNDIALS_LDIR)/libsundials_kinsol.a $(SUITESPARSE_LIBS) \
+		 $(LIB_OCT) $(LIB_LAPACK)
 
-OBJS= bvp1d.o  BVP1DImpl.o  GaussLobattoIntRule.o  MexInterface.o  SunVector.o
+OBJS= bvp1d.o  BVP1DImpl.o  GaussLobattoIntRule.o  MexInterface.o  SunVector.o \
+      BVPSolverStats.o FiniteDiffJacobian.o FDJacobian.o
 
 bvp1d.mex:$(OBJS)
 	mkoctfile -mex  $(OBJS) $(LIBS) -o bvp1d.mex
@@ -54,5 +66,5 @@ distclean: clean
 	
 test:
 	#echo $(findstring Linux, $(OS))
-	echo $(OS)
+	echo $(shell mkoctfile -p OCTINCLUDEDIR)
 
