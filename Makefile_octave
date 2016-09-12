@@ -38,9 +38,9 @@ else
 			SUNDIALS_LDIR=$(SUNDIALS_ROOT)/lib
 			BOOST_ROOT=/opt/local/include
 			LIB_LAPACK=-llapack -lblas
-			SUITESPARSE_LIB_DIR=/opt/local/lib
-	    SUITESPARSE_LIBS=-L$(SUITESPARSE_LIB_DIR) \
-	                -lklu -lamd -lcolamd -lbtf -lsuitesparseconfig
+			SUITESPARSE_ROOT=$(HOME)/src/SuiteSparse
+			SS_LIB_DIR=$(SUITESPARSE_ROOT)/staticlib
+	    SUITESPARSE_LIBS= -lklu -lamd -lcolamd -lbtf -lsuitesparseconfig
 		endif
 endif
 
@@ -48,15 +48,15 @@ INC=-I$(EIGEN) -I$(OCTAVE_INC) $(SUNDIALS_INC) -I$(BOOST_ROOT)
 
 CXXFLAGS= -g -O2 -DUSE_KLU=1 -std=gnu++0x -Wno-deprecated-declarations $(INC)
 
-LIBS=$(SUNDIALS_LDIR)/libsundials_ida.a $(SUNDIALS_LDIR)/libsundials_nvecserial.a \
-     $(SUNDIALS_LDIR)/libsundials_kinsol.a $(SUITESPARSE_LIBS) \
-		 $(LIB_OCT) $(LIB_LAPACK)
+BVPLIBS=$(SUNDIALS_LDIR)/libsundials_ida.a $(SUNDIALS_LDIR)/libsundials_nvecserial.a \
+     $(SUNDIALS_LDIR)/libsundials_kinsol.a \
+		 $(LIB_OCT) $(SUITESPARSE_LIBS) $(LIB_LAPACK)
 
 OBJS= bvp1d.o  BVP1DImpl.o  GaussLobattoIntRule.o  MexInterface.o  SunVector.o \
       BVPSolverStats.o FiniteDiffJacobian.o FDJacobian.o
 
 bvp1d.mex:$(OBJS)
-	mkoctfile -mex  $(OBJS) $(LIBS) -o bvp1d.mex
+	mkoctfile -mex  -v $(OBJS) $(BVPLIBS) -o bvp1d.mex
 
 clean:
 	$(RM) *.o

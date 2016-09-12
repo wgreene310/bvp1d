@@ -48,8 +48,8 @@ void BVPSolverStats::print() const
   if (!recordStats) return;
   printf("Number of mesh refinements = %d.\n", numMeshUpdates);
   printf("Number of points in final mesh = %d.\n", numPtsCurrentMesh);
-  printf("Number of residual function evaluations = %d\n", numFuncEvals);
-  printf("Number of nonlinear solver iterations = %d\n", numSolveIterations);
-  printf("%d Jacobian evaluations requiring %d residual function evaluations.\n",
+  printf("Number of residual function evaluations = %ld\n", numFuncEvals);
+  printf("Number of nonlinear solver iterations = %ld\n", numSolveIterations);
+  printf("%ld Jacobian evaluations requiring %ld residual function evaluations.\n",
     numJacEval, numFuncEvalJac);
 }
