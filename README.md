@@ -12,19 +12,18 @@ pre-built versions from the Releases area. The bvp1d function is packaged as
 a single mex file for Windows, Macintosh, and Linux platforms. Several examples
 and basic documentation are included.
 
-This page https://people.sc.fsu.edu/~jburkardt/m_src/bvp4c/bvp4c.html by John Burkhard 
+The page [bvp4c](https://people.sc.fsu.edu/~jburkardt/m_src/bvp4c/bvp4c.html) by John Burkhard 
 has several examples and links to other resources for bvp4c.
 
-bvp1d relies on the KINSOL library from Sundials 
-http://computation.llnl.gov/projects/sundials
+bvp1d relies on the KINSOL library from [Sundials] 
+(http://computation.llnl.gov/projects/sundials)
 for solution of the nonlinear algebraic equations.
 In turn, KINSOL relies on the KLU sparse solver from
-SuiteSparse http://faculty.cse.tamu.edu/davis/suitesparse.html
+[SuiteSparse](http://faculty.cse.tamu.edu/davis/suitesparse.html)
 for solving sparse, linear equations.
-The Eigen C++ matrix class library
-http://eigen.tuxfamily.org/index.php?title=Main_Page
+The [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page) C++ matrix class library,
 is used throughout the code. There is also a small dependency on
-the Boost C++ string package, http://www.boost.org/.
+the [Boost](http://www.boost.org/) C++ string package.
 So all of these libraries are required to build the software
 from scratch. The file, Makefile_octave, was used to build
 the versions for the three platforms in the Releases area.
