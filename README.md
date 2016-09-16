@@ -3,9 +3,13 @@
 
 bvp1d solves systems of boundary value differential equations in a single
 spatial variable. It is mostly compatible with the MATLAB function bvp4c,
-the main difference being that it currently does not include the extra convenience
-functions like bvpinit. Most bvp4c examples will work with bvp1d with only small
+one of the main differences being that it currently does not include the extra convenience functions like bvpinit. It also does not support multipoint
+boundary value problems or equations with complex numbers.
+Nevertheless, many bvp4c examples will work with bvp1d with only small
 changes.
+
+The theory for bvp4c (and bvp1d) is presented in the paper
+by [Kierzenka and Shampine](http://dl.acm.org/citation.cfm?id=502801).
 
 The easiest way to get started with bvp1d and Octave is to download one of the
 pre-built versions from the Releases area. The bvp1d function is packaged as

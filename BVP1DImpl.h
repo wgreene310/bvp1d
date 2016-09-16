@@ -60,6 +60,7 @@ private:
     RealVector &paramVec);
   void refineMesh(const RealMatrix &sol, RealVector &newMesh, RealMatrix &newInitSoln);
   void calcJacPattern(Eigen::SparseMatrix<double> &jac);
+  void checkMesh() const;
   BVPDefn &bvp;
   RealVector &initMesh, mesh;
   RealMatrix &initSolution;

@@ -230,6 +230,7 @@ BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &initMesh, RealMatrix &yInit,
 {
   kmem = 0;
   mesh = initMesh;
+  checkMesh();
   currentInitSoln = initSolution;
   if (yInit.cols() != mesh.size())
     throw BVP1dException("bvp1d:solinit_x_y_inconsistent",
@@ -496,4 +497,17 @@ void BVP1DImpl::calcJacobianODE(T &u, T &res, T2 Jac) {
   fDiffJac->calcJacobian(u, res, funcKinsol, this, Jac,
     &numFuncEvals);
   solverStats->incrementJacobianFuncCalls(numFuncEvals);
+}
+
+void BVP1DImpl::checkMesh() const
+{
+  double xLast = mesh[0];
+  for (int i = 1; i < mesh.size(); i++) {
+    if (mesh[i] <= xLast) {
+      throw BVP1dException("bvp1d:invalid_mesh", 
+        "Locations in the x-field must be strictly increasing. "
+        "bvp1d does not currently support multipoint BVPs.");
+    }
+    xLast = mesh[i];
+  }
 }

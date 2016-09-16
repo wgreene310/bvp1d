@@ -73,6 +73,13 @@ namespace {
     }
     return bvpOpts;
   }
+
+  void complexArgError(const char *fldName) {
+    char msg[256];
+    sprintf(msg, "The \"%s\" structure field is complex. " FUNC_NAME
+      " does not currently support complex equations.", fldName);
+    throw BVP1dException("bvp1d:complex", msg);
+  }
 }
 
 class MexBVP : public BVP1DImpl::BVPDefn {
@@ -165,6 +172,8 @@ void mexFunction(int nlhs, mxArray*
       sprintf(msg, "solinit is missing the required %s array.", fn);
       mexErrMsgIdAndTxt("bvp1d:solinit_field_missing", msg);
     }
+    if (mxIsComplex(mxFlds[i]))
+      complexArgError(fn);
   }
 
   int numFields = numReqFields + 2;
@@ -173,6 +182,8 @@ void mexFunction(int nlhs, mxArray*
   MexInterface mexInt;
   if (mxParams) {
     parameters = mexInt.fromMxArrayVec(mxParams);
+    if (mxIsComplex(mxParams))
+      complexArgError("parameters");
     numFields++;
   }
 

@@ -48,12 +48,12 @@ void MexInterface::callMatlab(const mxArray *inArgs[], int nargin,
     std::string funcName = getFuncNameFromHandle(inArgs[0]);
     sprintf(msg, "An error occurred in the call to user-defined function:\n\"%s\".",
       funcName.c_str());
-    mexErrMsgIdAndTxt("pde1d:mexCallMATLAB:err", msg);
+    mexErrMsgIdAndTxt("bvp1d:mexCallMATLAB:err", msg);
   }
   for (int i = 0; i < nargout; i++) {
     mxArray *a = matOutArgs[i];
     if (!a)
-      mexErrMsgIdAndTxt("pde1d:mexCallMATLAB:arg", "Error in mexCallMATLAB arg.");
+      mexErrMsgIdAndTxt("bvp1d:mexCallMATLAB:arg", "Error in mexCallMATLAB arg.");
     int retLen = mxGetNumberOfElements(a);
     int exLen = outArgs[i]->size();
     if (retLen != exLen) {
@@ -63,7 +63,7 @@ void MexInterface::callMatlab(const mxArray *inArgs[], int nargin,
       sprintf(msg, "In the call to user-defined function:\n\"%s\"\n"
         "returned entry %d had size (%d x %d) but a vector of size (%d x 1)"
         " was expected.", funcName.c_str(), i + 1, m, n, exLen);
-      mexErrMsgIdAndTxt("pde1d:mexCallMATLAB:arglen", msg);
+      mexErrMsgIdAndTxt("bvp1d:mexCallMATLAB:arglen", msg);
     }
     std::copy_n(mxGetPr(a), retLen, outArgs[i]->data());
     if (a)
@@ -77,7 +77,7 @@ std::string MexInterface::getFuncNameFromHandle(const mxArray *fh)
   int err = mexCallMATLAB(1, &funcName, 1,
     const_cast<mxArray**>(&fh), "func2str");
   if (err)
-    mexErrMsgIdAndTxt("pde1d:mexCallMATLAB",
+    mexErrMsgIdAndTxt("bvp1d:mexCallMATLAB",
     "Error in mexCallMATLAB.\n");
   const int bufLen = 1024;
   char buf[bufLen];
