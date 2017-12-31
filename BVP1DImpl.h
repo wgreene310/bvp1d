@@ -74,5 +74,6 @@ private:
   void *kmem;
   std::unique_ptr<FiniteDiffJacobian> fDiffJac;
   std::unique_ptr<BVPSolverStats> solverStats;
+  double relTol, absTol;
 };
 

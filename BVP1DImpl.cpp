@@ -98,7 +98,7 @@ void BVP1DImpl::calcError(const T &u)
   residualError.resize(numEl);
   residualError.setZero();
   RealVector fim2X(numDepVars);
-  double absOvRel = options.getAbsTol() / options.getRelTol();
+  double absOvRel = absTol / relTol;
   double maxErr = 0;
   for (int e = 0; e < numEl; e++) {
     double elemErr = 0;
@@ -246,6 +246,8 @@ BVP1DImpl::BVP1DImpl(BVPDefn &bvp, RealVector &initMesh, RealMatrix &yInit,
   cout << "YInit\n" << yInit << endl;
   cout << "pInit=" << parameters << endl;
 #endif
+  relTol = options.getRelTol();
+  absTol = options.getAbsTol();
 }
 
 
@@ -262,7 +264,6 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
     nMax = (int)std::floor(1000. / numDepVars);
   }
   const double o3 = 1. / 3.;
-  double relTol = options.getRelTol();
   double maxErr = 0;
 #if 0
   solverStats = std::make_unique<BVPSolverStats>(options.printStats());
@@ -275,6 +276,7 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
     if (err) return err;
     solverStats->update(kmem, mesh.size());
     maxErr = residualError.maxCoeff();
+    //printf("Number of elements=%d, max error=%12.3e\n", mesh.size() - 1, maxErr);
     if (maxErr <= relTol) {
       solverStats->print();
       return 0;
@@ -302,7 +304,6 @@ void BVP1DImpl::refineMesh(const RealMatrix &sol, RealVector &newMesh,
   RealMatrix &newInitSoln)
 {
   const double o3 = 1. / 3.;
-  double relTol = options.getRelTol();
   const int numNodes = mesh.size();
   int numEl = numNodes - 1;
   const int maxNewNodes = numNodes + 2 * numEl;
@@ -412,6 +413,14 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   const double mxnewtstep = 1e5;
   flag = KINSetMaxNewtonStep(kmem, mxnewtstep);
   check_flag(&flag, "KINSetMaxNewtonStep", 1);
+#if 0
+  // debug print
+  KINSetPrintLevel(kmem, 1);
+#endif
+
+  // FIXME!! this should be an option
+  flag = KINSetMaxSetupCalls(kmem, 1);
+  check_flag(&flag, "KINSetMaxSetupCalls", 1);
 
   /* Call main solver */
   int strat = KIN_LINESEARCH;
