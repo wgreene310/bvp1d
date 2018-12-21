@@ -17,10 +17,11 @@
 
 #include <nvector/nvector_serial.h>
 #include <kinsol/kinsol.h>
-#include <kinsol/kinsol_klu.h>
+//#include <kinsol/kinsol_klu.h>
 
 #include <Eigen/SparseCore>
 
+#if 0
 struct SunSparseMat : public _SlsMat {
   SunSparseMat(Eigen::SparseMatrix<double> &eMat) {
     M = static_cast<int>(eMat.rows());
@@ -31,19 +32,21 @@ struct SunSparseMat : public _SlsMat {
     colptrs = eMat.outerIndexPtr();
   }
 };
+#endif
 
 class FiniteDiffJacobian {
 public:
   typedef Eigen::SparseMatrix<double> SparseMat;
+  typedef Eigen::Map<SparseMat> SparseMap;
   FiniteDiffJacobian(SparseMat &jacPattern);
   ~FiniteDiffJacobian();
   void calcJacobian(N_Vector uu, N_Vector r,
-    KINSysFn rf, void *userData, SlsMat Jac, int *numFuncEvals=0);
+    KINSysFn rf, void *userData, SparseMap Jac, int *numFuncEvals=0);
 private:
+  void copyIndices(int *outerInd, int *innerInd);
   int neq, nnz;
   Eigen::VectorXi indrow, jpntr, ngrp;
   int maxgrp, mingrp;
-  double sqrtEps;
 };
 
 

@@ -16,6 +16,7 @@
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <stdio.h>
 
 using std::cout;
 using std::endl;
@@ -36,28 +37,53 @@ using std::endl;
 #include <nvector/nvector_serial.h>
 #include <sundials/sundials_types.h>
 #include <kinsol/kinsol.h>
-#include <kinsol/kinsol_dense.h>
+#include <kinsol/kinsol_direct.h> 
+#if SUNDIALS_VERSION_MAJOR >= 3
+#define SUNDIALS_3 1
+#endif
 #if USE_LAPACK
 #include <kinsol/kinsol_lapack.h>
 #endif
 #if USE_KLU
+#if SUNDIALS_3
+#include <sunlinsol/sunlinsol_klu.h>
+#else
 #include <kinsol/kinsol_klu.h>
+#endif
+#else
+#if ! SUNDIALS_3
+#include <kinsol/kinsol_dense.h>
+#endif
 #endif
 
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
 
+#if SUNDIALS_3
+class SunSparseMap : public FiniteDiffJacobian::SparseMap {
+public:
+  SunSparseMap(SUNMatrix a) :
+    FiniteDiffJacobian::SparseMap(SUNSparseMatrix_Rows(a),
+      SUNSparseMatrix_Columns(a),
+      SUNSparseMatrix_NNZ(a),
+      SUNSparseMatrix_IndexPointers(a),
+      SUNSparseMatrix_IndexValues(a),
+      SUNSparseMatrix_Data(a)) {
+  }
+};
+#endif
+
 
 template<class T1, class T2>
 void BVP1DImpl::calcPhi(const T1 &y, T2 &phi)
 {
-  const int numNodes = mesh.size();
+  const size_t numNodes = mesh.size();
   Eigen::Map<const Eigen::MatrixXd> yMat(y.data(), numDepVars, numNodes);
   if (numParams) {
     parameters = y.segment(numDepVars*numNodes, numParams);
     //cout << "p=" << parameters.transpose() << endl;
   }
-  int phiOff = gVec.rows();
+  size_t phiOff = gVec.rows();
   bvp.bcFunc(yMat.col(0), yMat.col(numNodes - 1), parameters, gVec);
   phi.head(phiOff) = gVec;
   bvp.odeFunc(mesh[0], yMat.col(0), parameters, fim1);
@@ -89,12 +115,12 @@ void BVP1DImpl::calcError(const T &u)
   for (int i = 0; i < numIntPts; i++)
     intPts[i] = intRule.getPoint(i + 1);
 
-  const int numNodes = mesh.size();
+  const size_t numNodes = mesh.size();
   Eigen::Map<const Eigen::MatrixXd> y(u.data(), numDepVars, numNodes);
 
   if (numParams) 
     parameters = u.segment(numDepVars*numNodes, numParams);
-  int numEl = mesh.size() - 1;
+  size_t numEl = mesh.size() - 1;
   residualError.resize(numEl);
   residualError.setZero();
   RealVector fim2X(numDepVars);
@@ -172,6 +198,7 @@ namespace {
     }
   }
 
+#if 0
   SparseMat toEigen(SlsMat a) {
     SparseMat A(a->M, a->N);
     auto nnz = a->NNZ;
@@ -183,6 +210,7 @@ namespace {
     A.makeCompressed();
     return A;
   }
+#endif
 
   int funcKinsol(N_Vector y, N_Vector phi, void *user_data) {
 
@@ -196,7 +224,13 @@ namespace {
 
 #if USE_KLU
 
-  int jacKinsol(N_Vector u, N_Vector f, SlsMat Jac, void *user_data,
+  int jacKinsol(N_Vector u, N_Vector f, 
+#if SUNDIALS_3
+    SUNMatrix Jac,
+#else
+    SlsMat Jac,
+#endif
+    void *user_data,
     N_Vector tmp1, N_Vector tmp2) {
     BVP1DImpl *bvp = (BVP1DImpl*) user_data;
 
@@ -271,7 +305,7 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   solverStats = std::unique_ptr<BVPSolverStats>(new BVPSolverStats(options.printStats()));
 #endif
   while (true) {
-    const int numNodes = mesh.size();
+    const size_t numNodes = mesh.size();
     int err = solveFixedMesh(solMat, yPrime, paramVec);
     if (err) return err;
     solverStats->update(kmem, mesh.size());
@@ -304,9 +338,9 @@ void BVP1DImpl::refineMesh(const RealMatrix &sol, RealVector &newMesh,
   RealMatrix &newInitSoln)
 {
   const double o3 = 1. / 3.;
-  const int numNodes = mesh.size();
-  int numEl = numNodes - 1;
-  const int maxNewNodes = numNodes + 2 * numEl;
+  const size_t numNodes = mesh.size();
+  size_t numEl = numNodes - 1;
+  const size_t maxNewNodes = numNodes + 2 * numEl;
   newMesh.resize(maxNewNodes);
   newInitSoln.resize(numDepVars, maxNewNodes);
   int numNewN = 1;
@@ -351,9 +385,9 @@ void BVP1DImpl::refineMesh(const RealMatrix &sol, RealVector &newMesh,
 int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime, 
   RealVector &paramVec)
 {
-  const int numNodes = mesh.size();
-  const int numYEqns = numDepVars*numNodes;
-  const int neq = numYEqns + numParams;
+  const size_t numNodes = mesh.size();
+  const size_t numYEqns = numDepVars*numNodes;
+  const size_t neq = numYEqns + numParams;
   solMat.resize(numDepVars, numNodes);
   fRHS.resize(numDepVars, numNodes);
 
@@ -384,6 +418,27 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   check_flag(&flag, "KINSetFuncNormTol", 1);
   flag = KINSetScaledStepTol(kmem, scsteptol);
   check_flag(&flag, "KINSetScaledStepTol", 1);
+#if USE_KLU
+  SparseMat P;
+  calcJacPattern(P);
+#if 0
+  fDiffJac = std::make_unique<FiniteDiffJacobian>(P);
+#else
+  fDiffJac = std::unique_ptr<FiniteDiffJacobian>(new FiniteDiffJacobian(P));
+#endif
+  int nnz = P.nonZeros();
+#endif
+#if SUNDIALS_3
+  SUNMatrix A = SUNSparseMatrix((sunindextype) neq,
+    (sunindextype)neq, (sunindextype)nnz, CSC_MAT);
+  check_flag(A, "SUNSparseMatrix", 0);
+  SUNLinearSolver LS = SUNKLU(u(), A);
+  check_flag(LS, "SUNKLU", 0);
+  ier = KINDlsSetLinearSolver(kmem, LS, A);
+  check_flag(&ier, "IDADlsSetLinearSolver", 1);
+  ier = KINDlsSetJacFn(kmem, jacKinsol);
+  check_flag(&ier, "IDADlsSetJacFn", 1);
+#else
 #if USE_LAPACK
   flag = KINLapackDense(kmem, neq);
   check_flag(&flag, "KINLapackDense", 1);
@@ -398,13 +453,14 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   int nnz = P.nonZeros();
   //cout << "jacobian pattern\n" << P.toDense() << endl;
   //print(P);
+#else
   flag = KINKLU(kmem, neq, nnz);
   check_flag(&flag, "KINKLU", 1);
   flag = KINSlsSetSparseJacFn(kmem, jacKinsol);
   check_flag(&flag, "KINSlsSetSparseJacFn", 1);
-#else
   flag = KINDense(kmem, neq);
   check_flag(&flag, "KINDense", 1);
+#endif
 #endif
 
   SunVector scale(neq);
@@ -457,18 +513,18 @@ RealVector BVP1DImpl::linspace(double start, double end, int n)
 }
 
 void BVP1DImpl::calcJacPattern(Eigen::SparseMatrix<double> &J) {
-  const int numNodes = mesh.size();
-  const int numYEqns = numDepVars*numNodes;
-  const int numFEMEqns = numYEqns + numParams;
+  const size_t numNodes = mesh.size();
+  const size_t numYEqns = numDepVars*numNodes;
+  const size_t numFEMEqns = numYEqns + numParams;
   J.resize(numFEMEqns, numFEMEqns);
-  int n2 = numDepVars*numDepVars;
-  int nel = numNodes - 1;
+  size_t n2 = numDepVars*numDepVars;
+  size_t nel = numNodes - 1;
 
-  int nnz = 3 * n2*(nel + 1); // approximate nnz
+  size_t nnz = 3 * n2*(nel + 1); // approximate nnz
   J.reserve(nnz);
-  int numG = numDepVars + numParams;
-  int rowOff = numG;
-  int colOff = 0;
+  size_t numG = numDepVars + numParams;
+  size_t rowOff = numG;
+  size_t colOff = 0;
   for (int n = 0; n < nel; n++) {
     for (int i = 0; i < numDepVars; i++) {
       for (int j = 0; j < numDepVars; j++) {
@@ -503,7 +559,8 @@ void BVP1DImpl::calcJacPattern(Eigen::SparseMatrix<double> &J) {
 template<class T, class T2>
 void BVP1DImpl::calcJacobianODE(T &u, T &res, T2 Jac) {
   int numFuncEvals;
-  fDiffJac->calcJacobian(u, res, funcKinsol, this, Jac,
+  SunSparseMap eigJac(Jac);
+  fDiffJac->calcJacobian(u, res, funcKinsol, this, eigJac,
     &numFuncEvals);
   solverStats->incrementJacobianFuncCalls(numFuncEvals);
 }

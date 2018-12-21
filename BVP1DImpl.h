@@ -67,7 +67,7 @@ private:
   RealVector parameters;
   RealMatrix currentInitSoln;
   const BVP1dOptions &options;
-  int numDepVars, numParams;
+  size_t numDepVars, numParams;
   RealVector gVec, fi, fim1, fim2, yim2;
   RealMatrix fRHS;
   RealVector residualError;

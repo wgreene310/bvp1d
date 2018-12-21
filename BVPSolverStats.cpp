@@ -16,7 +16,9 @@
 #include <stdio.h>
 
 #include <kinsol/kinsol.h>
-#include <kinsol/kinsol_dense.h>
+#include <kinsol/kinsol_direct.h> 
+
+//#include <kinsol/kinsol_dense.h>
 #if USE_KLU
 #include <kinsol/kinsol_klu.h>
 #endif
@@ -33,7 +35,7 @@ recordStats(recordStats)
   numMeshUpdates = 0;
 }
 
-void BVPSolverStats::update(void *kinsolMemory, int numMeshPts) {
+void BVPSolverStats::update(void *kinsolMemory, size_t numMeshPts) {
   if (!recordStats) return;
   numMeshUpdates++;
   numPtsCurrentMesh = numMeshPts;
@@ -45,10 +47,10 @@ void BVPSolverStats::update(void *kinsolMemory, int numMeshPts) {
   numSolveIterations += nSolvIters;
   long numJac, numFuncJac = 0;
 #if USE_KLU
-  KINSlsGetNumJacEvals(kinsolMemory, &numJac);
+  KINGetNumJacEvals(kinsolMemory, &numJac);
 #else
-  KINDlsGetNumJacEvals(kinsolMemory, &numJac);
-  KINDlsGetNumFuncEvals(kinsolMemory, &numFuncJac);
+  //KINGetNumJacEvals(kinsolMemory, &numJac);
+  KINGetNumFuncEvals(kinsolMemory, &numFuncJac);
 #endif
   numJacEval += numJac;
   numFuncEvalJac += numFuncJac;

@@ -19,7 +19,7 @@ class BVPSolverStats
 {
 public:
   BVPSolverStats(bool recordStats);
-  void update(void *kinsolMemory, int numMeshPts);
+  void update(void *kinsolMemory, size_t numMeshPts);
   void incrementJacobianFuncCalls(int numCalls);
   void print() const;
 private:
