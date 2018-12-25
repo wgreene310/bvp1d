@@ -120,6 +120,7 @@ set(BVP_SRC bvp1d.cpp  BVP1DImpl.cpp  GaussLobattoIntRule.cpp  MexInterface.cpp 
 set(BVP_H
 		BVP1dException.h  BVP1dOptions.h    cubicInterp.h  FiniteDiffJacobian.h   MexInterface.h
 BVP1DImpl.h       BVPSolverStats.h  FDJacobian.h   GaussLobattoIntRule.h  SunVector.h
+mexDebug.h
 )
 			
 link_directories(${SUNDIALS_LIB_DIR} ${SUITESPARSE_LIB_DIR} ${MEX_LIB_DIR})

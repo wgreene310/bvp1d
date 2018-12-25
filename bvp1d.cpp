@@ -25,6 +25,8 @@ using std::endl;
 
 #include <mex.h>
 
+//#include "mexDebug.h"
+
 #include "BVP1DImpl.h"
 #include "MexInterface.h"
 #include "BVP1dOptions.h"
@@ -161,7 +163,8 @@ void mexFunction(int nlhs, mxArray*
   if (!mxIsStruct(solinit))
     mexErrMsgIdAndTxt("bvp1d:arg3_not_struct", 
     "Argument three must be a struct.");
-  const char *fieldNames[] = { "x", "y", "solver", "yp", "parameters" };
+  const char *fieldNames[] = { "x", "y", "solver", "yp", "error", 
+    "parameters" };
   const int numReqFields = 2;
     mxArray *mxFlds[numReqFields];
   for (int i = 0; i < numReqFields; i++) {
@@ -176,7 +179,7 @@ void mexFunction(int nlhs, mxArray*
       complexArgError(fn);
   }
 
-  int numFields = numReqFields + 2;
+  int numFields = numReqFields + 3;
   RealVector parameters;
   mxArray *mxParams = mxGetField(solinit, 0, "parameters");
   MexInterface mexInt;

@@ -21,6 +21,8 @@
 using std::cout;
 using std::endl;
 
+//#include "mexDebug.h"
+
 #include "BVP1DImpl.h"
 #include "BVP1dException.h"
 #include "cubicInterp.h"
@@ -58,6 +60,8 @@ using std::endl;
 
 typedef Eigen::Map<Eigen::VectorXd> MapVec;
 typedef Eigen::Map<Eigen::MatrixXd> MapMat;
+
+
 
 #if SUNDIALS_3
 class SunSparseMap : public FiniteDiffJacobian::SparseMap {
@@ -308,6 +312,7 @@ int BVP1DImpl::solve(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
     const size_t numNodes = mesh.size();
     int err = solveFixedMesh(solMat, yPrime, paramVec);
     if (err) return err;
+    //checkHeap("after solveFixedMesh");
     solverStats->update(kmem, mesh.size());
     maxErr = residualError.maxCoeff();
     //printf("Number of elements=%d, max error=%12.3e\n", mesh.size() - 1, maxErr);
