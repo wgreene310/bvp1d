@@ -1,4 +1,4 @@
-// Copyright (C) 2016 William H. Greene
+// Copyright (C) 2016-2017 William H. Greene
 //
 // This program is free software; you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the Free Software
@@ -17,23 +17,43 @@
 #define SunVector_h
 
 #include <stddef.h>
+#include <assert.h>
+
+#include <Eigen/Core>
 
 #include <nvector/nvector_serial.h>
 
-class SunVector {
-public:
-  SunVector(size_t n);
-  ~SunVector();
-  void setConstant(double c);
-  double &operator[](int i) {
-    return NV_DATA_S(nv)[i];
-  }
-  N_Vector operator()() {
-    return nv;
-  }
-private:
+struct _SundialsVector_ {
+  _SundialsVector_(N_Vector nv) : nv(nv) {}
   N_Vector nv;
 };
 
-#endif
 
+class SunVector : private _SundialsVector_ ,
+  public Eigen::Map<Eigen::VectorXd>
+{
+public:
+  explicit SunVector(size_t n);
+  explicit SunVector(N_Vector nv);
+  SunVector(const SunVector &rhs);
+  SunVector &operator=(const SunVector &rhs) {
+    if (this == &rhs) return *this;
+    assert(rows() == rhs.rows());
+    Eigen::Map<Eigen::VectorXd>::operator=(rhs);
+    return *this;
+  }
+  SunVector &operator=(const Eigen::Ref<const Eigen::VectorXd> &rhs)
+  {
+    assert(rows() == rhs.rows());
+    Eigen::Map<Eigen::VectorXd>::operator=(rhs);
+    return *this;
+  }
+  ~SunVector();
+  N_Vector getNV() {
+    return nv;
+  }
+private:
+  bool isExternal;
+};
+
+#endif

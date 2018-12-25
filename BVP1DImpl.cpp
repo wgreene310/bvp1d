@@ -407,7 +407,7 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   }
   kmem = KINCreate();
   check_flag((void *) kmem, "KINCreate", 0);
-  int flag = KINInit(kmem, funcKinsol, u());
+  int flag = KINInit(kmem, funcKinsol, u.getNV());
   check_flag(&flag, "KINInit", 1);
   int ier = KINSetUserData(kmem, this);
   check_flag(&ier, "KINSetUserData", 1);
@@ -426,13 +426,13 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
 #else
   fDiffJac = std::unique_ptr<FiniteDiffJacobian>(new FiniteDiffJacobian(P));
 #endif
-  int nnz = P.nonZeros();
+  size_t nnz = P.nonZeros();
 #endif
 #if SUNDIALS_3
   SUNMatrix A = SUNSparseMatrix((sunindextype) neq,
     (sunindextype)neq, (sunindextype)nnz, CSC_MAT);
   check_flag(A, "SUNSparseMatrix", 0);
-  SUNLinearSolver LS = SUNKLU(u(), A);
+  SUNLinearSolver LS = SUNKLU(u.getNV(), A);
   check_flag(LS, "SUNKLU", 0);
   ier = KINDlsSetLinearSolver(kmem, LS, A);
   check_flag(&ier, "IDADlsSetLinearSolver", 1);
@@ -481,10 +481,10 @@ int BVP1DImpl::solveFixedMesh(Eigen::MatrixXd &solMat, RealMatrix &yPrime,
   /* Call main solver */
   int strat = KIN_LINESEARCH;
   flag = KINSol(kmem,           /* KINSol memory block */
-    u(),         /* initial guess on input; solution vector */
+    u.getNV(),         /* initial guess on input; solution vector */
     strat,     /* global strategy choice */
-    scale(),          /* scaling vector, for the variable cc */
-    scale());         /* scaling vector for function values fval */
+    scale.getNV(),          /* scaling vector, for the variable cc */
+    scale.getNV());         /* scaling vector for function values fval */
   check_flag(&flag, "KINSol", 1);
 
   //cout << uMat << endl;

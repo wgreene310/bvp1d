@@ -1,4 +1,4 @@
-// Copyright (C) 2016 William H. Greene
+// Copyright (C) 2016-2017 William H. Greene
 //
 // This program is free software; you can redistribute it and/or modify it under
 // the terms of the GNU General Public License as published by the Free Software
@@ -19,25 +19,42 @@
 #include "BVP1dException.h"
 
 
-SunVector::SunVector(size_t n)
+SunVector::SunVector(size_t n) : 
+_SundialsVector_(N_VNew_Serial((int) n)),
+Eigen::Map<Eigen::VectorXd>(NV_DATA_S(nv), n)
 {
-  nv = N_VNew_Serial(n);
   if (!nv) {
     char msg[256];
     sprintf(msg, "Sundials error: unable to allocate serial vector of "
       "length %zu", n);
-    throw BVP1dException("pde1d:sundials_mem_alloc", msg);
+    throw BVP1dException("bvp1d:sundials_mem_alloc", msg);
   }
+  isExternal = false;
 }
 
+SunVector::SunVector(const SunVector &rhs) : 
+_SundialsVector_(N_VNew_Serial((int) rhs.size())), 
+Eigen::Map<Eigen::VectorXd>(NV_DATA_S(nv), rhs.size())
+{
+  if (!nv) {
+    char msg[256];
+    sprintf(msg, "Sundials error: unable to allocate serial vector of "
+      "length %zu", size());
+    throw BVP1dException("bvp1d:sundials_mem_alloc", msg);
+  }
+  Eigen::Map<Eigen::VectorXd>::operator=(rhs);
+  isExternal = false;
+}
+
+SunVector::SunVector(N_Vector nv) : _SundialsVector_(nv),
+Eigen::Map<Eigen::VectorXd>(NV_DATA_S(nv), NV_LENGTH_S(nv))
+{
+  isExternal = true;
+}
 
 SunVector::~SunVector()
 {
-  if (nv) 
+  if (nv && !isExternal)
     N_VDestroy_Serial(nv);
 }
 
-void SunVector::setConstant(double c)
-{
-  N_VConst(c, nv);
-}

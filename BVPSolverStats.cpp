@@ -16,12 +16,6 @@
 #include <stdio.h>
 
 #include <kinsol/kinsol.h>
-#include <kinsol/kinsol_direct.h> 
-
-//#include <kinsol/kinsol_dense.h>
-#if USE_KLU
-#include <kinsol/kinsol_klu.h>
-#endif
 
 #include "BVPSolverStats.h"
 
@@ -49,7 +43,7 @@ void BVPSolverStats::update(void *kinsolMemory, size_t numMeshPts) {
 #if USE_KLU
   KINGetNumJacEvals(kinsolMemory, &numJac);
 #else
-  //KINGetNumJacEvals(kinsolMemory, &numJac);
+  KINGetNumJacEvals(kinsolMemory, &numJac);
   KINGetNumFuncEvals(kinsolMemory, &numFuncJac);
 #endif
   numJacEval += numJac;

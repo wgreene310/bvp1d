@@ -115,12 +115,17 @@ message("OCTAVE_ROOT=" ${OCTAVE_ROOT})
 message("OCTAVE_REL=" ${OCTAVE_REL})
 
 set(BVP_SRC bvp1d.cpp  BVP1DImpl.cpp  GaussLobattoIntRule.cpp  MexInterface.cpp  SunVector.cpp 
-      BVPSolverStats.cpp FiniteDiffJacobian.cpp FDJacobian.c)
+		BVPSolverStats.cpp FiniteDiffJacobian.cpp FDJacobian.c)
+		
+set(BVP_H
+		BVP1dException.h  BVP1dOptions.h    cubicInterp.h  FiniteDiffJacobian.h   MexInterface.h
+BVP1DImpl.h       BVPSolverStats.h  FDJacobian.h   GaussLobattoIntRule.h  SunVector.h
+)
 			
 link_directories(${SUNDIALS_LIB_DIR} ${SUITESPARSE_LIB_DIR} ${MEX_LIB_DIR})
 
 add_library (bvp1d SHARED 
-${BVP_SRC}
+${BVP_SRC} ${BVP_H}
 )
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL MSVC)

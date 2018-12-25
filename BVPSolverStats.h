@@ -26,7 +26,7 @@ private:
   bool recordStats;
   long numFuncEvals, numSolveIterations, numJacEval;
   long numFuncEvalJac;
-  int numPtsCurrentMesh;
+  size_t numPtsCurrentMesh;
   int numMeshUpdates;
 };
 
